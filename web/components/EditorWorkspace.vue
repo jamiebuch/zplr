@@ -340,6 +340,7 @@
           :field-values="activeFieldValues"
           :active-record-label="activeRecord?.name"
           :guides="activeDocument.guides"
+          :preferences="visualEditorPreferences"
           :stale="previewStale"
           @edit="applyVisualEdit"
           @select-source="revealVisualSpan"
@@ -347,6 +348,7 @@
           @update-field-value="updateActiveFieldValue"
           @open-data-manager="dataManagerOpen = true"
           @update:guides="activeDocument.guides = $event"
+          @update:preferences="visualEditorPreferences = $event"
           @render="renderNow"
           @download-png="downloadPng"
           @download-all-pngs="downloadAllPngs"
@@ -565,6 +567,11 @@ import {
   validateZplParameters,
   zplLanguageCoverage,
 } from "../zplLanguage";
+import {
+  defaultVisualEditorPreferences,
+  normalizeVisualEditorPreferences,
+  type VisualEditorPreferences,
+} from "../editorPreferences";
 
 const MonacoEditor = defineAsyncComponent(() => import("./MonacoEditor.vue"));
 const VisualEditor = defineAsyncComponent(() => import("./VisualEditor.vue"));
@@ -624,6 +631,12 @@ interface PreviewPreferences {
   height: number;
 }
 
+interface StoredEditorPreferences {
+  version: 1;
+  editor: EditorPreferences;
+  visual: VisualEditorPreferences;
+}
+
 const defaultEditorPreferences: EditorPreferences = {
   theme: "system",
   fontSize: 13,
@@ -642,7 +655,9 @@ const defaultPreviewPreferences: PreviewPreferences = {
 const workspaceKey = "zplr.editor.workspace.v3";
 const previousWorkspaceKey = "zplr.editor.workspace.v2";
 const legacyWorkspaceKey = "zplr.editor.workspace.v1";
+const editorPreferencesKey = "zplr.editor.preferences.v1";
 const initialWorkspace = restoreWorkspace();
+const initialEditorPreferences = restoreEditorPreferences(initialWorkspace?.preferences);
 const documents = ref<WorkspaceDocument[]>(initialWorkspace?.documents ?? [
   createWorkspaceDocument(shippingSample, "shipping-label.zpl", { sampleId: "shipping" }),
 ]);
@@ -662,8 +677,10 @@ const selectedSample = computed<SampleId | "custom">(() =>
   activeDocument.value.sampleId ?? samples.find((sample) => sample.source === source.value)?.id ?? "custom"
 );
 const editorPreferences = ref<EditorPreferences>({
-  ...defaultEditorPreferences,
-  ...initialWorkspace?.preferences,
+  ...initialEditorPreferences.editor,
+});
+const visualEditorPreferences = ref<VisualEditorPreferences>({
+  ...initialEditorPreferences.visual,
 });
 const initialPreviewPreferences = initialWorkspace?.preview ?? defaultPreviewPreferences;
 const printDensity = ref<PrintDensity>(initialPreviewPreferences.printDensity);
@@ -890,6 +907,45 @@ function normalizePreviewPreferences(value: unknown): PreviewPreferences {
     width: typeof candidate.width === "number" ? Math.max(1, Math.min(8_192, Math.round(candidate.width))) : 812,
     height: typeof candidate.height === "number" ? Math.max(1, Math.min(8_192, Math.round(candidate.height))) : 1218,
   };
+}
+
+function restoreEditorPreferences(fallbackEditorPreferences?: unknown): {
+  editor: EditorPreferences;
+  visual: VisualEditorPreferences;
+} {
+  const fallback = {
+    editor: normalizeEditorPreferences(fallbackEditorPreferences),
+    visual: { ...defaultVisualEditorPreferences },
+  };
+  try {
+    const value = window.localStorage.getItem(editorPreferencesKey);
+    if (!value) return fallback;
+    const parsed = JSON.parse(value) as Partial<StoredEditorPreferences>;
+    if (parsed.version !== 1) return fallback;
+    return {
+      editor: parsed.editor === undefined
+        ? fallback.editor
+        : normalizeEditorPreferences(parsed.editor),
+      visual: parsed.visual === undefined
+        ? fallback.visual
+        : normalizeVisualEditorPreferences(parsed.visual),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function persistEditorPreferences(): void {
+  try {
+    const preferences: StoredEditorPreferences = {
+      version: 1,
+      editor: normalizeEditorPreferences(editorPreferences.value),
+      visual: normalizeVisualEditorPreferences(visualEditorPreferences.value),
+    };
+    window.localStorage.setItem(editorPreferencesKey, JSON.stringify(preferences));
+  } catch {
+    // Preferences remain available for this session if browser storage is blocked.
+  }
 }
 
 function restoreWorkspace(): StoredWorkspace | undefined {
@@ -1467,6 +1523,7 @@ function renameOriginalAsset(assetId: string, resourceName: string): void {
 
 function resetSettings(): void {
   editorPreferences.value = { ...defaultEditorPreferences };
+  visualEditorPreferences.value = { ...defaultVisualEditorPreferences };
   printDensity.value = defaultPreviewPreferences.printDensity;
   autoRender.value = defaultPreviewPreferences.autoRender;
   strictMode.value = defaultPreviewPreferences.strict;
@@ -1688,7 +1745,11 @@ watch(source, () => {
 });
 watch(documents, persistWorkspace, { deep: true });
 watch(activeFieldValues, () => requestPreview(0));
-watch(editorPreferences, persistWorkspace, { deep: true });
+watch(editorPreferences, () => {
+  persistEditorPreferences();
+  persistWorkspace();
+}, { deep: true });
+watch(visualEditorPreferences, persistEditorPreferences, { deep: true });
 watch(activeDocumentId, () => {
   highlightRange.value = undefined;
   visualSelectedSpan.value = undefined;
@@ -1718,6 +1779,7 @@ watch(activeLabelIndex, () => {
 watch(splitPercent, applySplit);
 
 onMounted(() => {
+  persistEditorPreferences();
   schedulePreview(0);
   window.addEventListener("keydown", handleKeyboardShortcut, true);
   window.addEventListener("resize", applySplit);

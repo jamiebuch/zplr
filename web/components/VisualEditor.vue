@@ -724,6 +724,10 @@ import {
   visualFieldHitGeometry as buildVisualFieldHitGeometry,
   type VisualHitGeometry,
 } from "../visualEditorHitTesting";
+import type {
+  VisualEditorPreferences,
+  VisualEditorSnapSize,
+} from "../editorPreferences";
 
 const props = defineProps<{
   source: string;
@@ -744,6 +748,7 @@ const props = defineProps<{
   fieldValues?: Readonly<Record<string, string>>;
   activeRecordLabel?: string;
   guides?: readonly ManualGuide[];
+  preferences: VisualEditorPreferences;
 }>();
 
 const emit = defineEmits<{
@@ -757,6 +762,7 @@ const emit = defineEmits<{
   openDataManager: [];
   "update:guides": [guides: ManualGuide[]];
   "update:activeLabelIndex": [index: number];
+  "update:preferences": [preferences: VisualEditorPreferences];
 }>();
 
 const tools: readonly { kind: VisualElementKind; name: string; icon: Component }[] = [
@@ -795,10 +801,22 @@ const shortcutCloseButton = ref<HTMLButtonElement | null>(null);
 const viewportWidth = ref(0);
 const viewportHeight = ref(0);
 const zoom = ref(100);
-const snapSize = ref(10);
-const gridVisible = ref(true);
-const objectSnapEnabled = ref(true);
-const rulersVisible = ref(true);
+const snapSize = computed<VisualEditorSnapSize>({
+  get: () => props.preferences.snapSize,
+  set: (snapSize) => emit("update:preferences", { ...props.preferences, snapSize }),
+});
+const gridVisible = computed<boolean>({
+  get: () => props.preferences.gridVisible,
+  set: (gridVisible) => emit("update:preferences", { ...props.preferences, gridVisible }),
+});
+const objectSnapEnabled = computed<boolean>({
+  get: () => props.preferences.objectSnapEnabled,
+  set: (objectSnapEnabled) => emit("update:preferences", { ...props.preferences, objectSnapEnabled }),
+});
+const rulersVisible = computed<boolean>({
+  get: () => props.preferences.rulersVisible,
+  set: (rulersVisible) => emit("update:preferences", { ...props.preferences, rulersVisible }),
+});
 const alignToLabel = ref(false);
 const toolDragActive = ref(false);
 const sidebarTab = ref<"layers" | "properties">("layers");

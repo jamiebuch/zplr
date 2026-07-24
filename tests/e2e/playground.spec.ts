@@ -200,6 +200,29 @@ test("uses the system color scheme as the default editor theme", async ({ page }
     .toHaveValue("light");
 });
 
+test("starts with the canvas grid hidden and restores visual editor preferences", async ({ page }) => {
+  await page.goto("/editor");
+  await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });
+
+  const gridToggle = page.getByRole("button", { name: "Toggle grid", exact: true });
+  const grid = page.getByTestId("visual-label-canvas").locator(".designer-grid");
+  const snapSelect = page.getByLabel("WYSIWYG grid snap");
+  await expect(gridToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(grid).toHaveCount(0);
+
+  await gridToggle.click();
+  await snapSelect.selectOption("20");
+  await expect(gridToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(grid).toHaveCount(1);
+
+  await page.reload();
+  await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Toggle grid", exact: true }))
+    .toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("visual-label-canvas").locator(".designer-grid")).toHaveCount(1);
+  await expect(page.getByLabel("WYSIWYG grid snap")).toHaveValue("20");
+});
+
 test("keeps multiple files, dirty state, and editor models independent", async ({ page }) => {
   await page.goto("/editor");
   await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });
