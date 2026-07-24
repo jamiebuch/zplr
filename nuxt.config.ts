@@ -1,5 +1,9 @@
 import { fileURLToPath } from "node:url";
 import packageJson from "./package.json";
+import {
+  zplCommandGuides,
+  zplCommandRoute,
+} from "./web/zplDocumentation";
 
 export default defineNuxtConfig({
   compatibilityDate: "2026-07-21",
@@ -40,9 +44,14 @@ export default defineNuxtConfig({
   nitro: {
     preset: "static",
     prerender: {
-      routes: ["/", "/editor"],
+      routes: [
+        "/",
+        "/editor",
+        "/zpl-commands",
+        ...zplCommandGuides.map(zplCommandRoute),
+      ],
       autoSubfolderIndex: false,
-      crawlLinks: true,
+      crawlLinks: false,
     },
   },
   typescript: {

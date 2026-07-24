@@ -28,3 +28,9 @@
 
 /sitemap.xml
   Cache-Control: public, max-age=3600
+
+/zpl-command-index.json
+  Cache-Control: public, max-age=86400, must-revalidate
+
+/og.png
+  Cache-Control: public, max-age=86400

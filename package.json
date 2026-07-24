@@ -67,6 +67,8 @@
     "docs:diagnostics:check": "node scripts/generate-diagnostic-docs.mjs --check",
     "docs:conformance": "node --import tsx scripts/generate-conformance-docs.ts",
     "docs:conformance:check": "node --import tsx scripts/generate-conformance-docs.ts --check",
+    "docs:commands": "node --import tsx scripts/generate-command-documentation.ts",
+    "docs:commands:check": "node --import tsx scripts/generate-command-documentation.ts --check",
     "font:noto:generate": "node scripts/generate-font-assets.mjs",
     "package:smoke": "node scripts/smoke-package.mjs",
     "package:lint": "publint --strict",
@@ -88,7 +90,7 @@
     "typecheck:web": "nuxt prepare && vue-tsc --noEmit -p tsconfig.web.json",
     "screenshots:web": "playwright test --config=playwright.screenshots.config.ts",
     "screenshots:update": "node scripts/update-screenshot-baselines.mjs",
-    "verify:core": "pnpm test && pnpm run docs:support:check && pnpm run docs:diagnostics:check && pnpm run docs:conformance:check && pnpm run typecheck && pnpm run build && pnpm run api:check && pnpm run package:check && pnpm run size:check:library && pnpm run license:check",
+    "verify:core": "pnpm test && pnpm run docs:support:check && pnpm run docs:diagnostics:check && pnpm run docs:conformance:check && pnpm run docs:commands:check && pnpm run typecheck && pnpm run build && pnpm run api:check && pnpm run package:check && pnpm run size:check:library && pnpm run license:check",
     "verify": "pnpm run verify:core && pnpm run build:web && pnpm run size:check && pnpm run test:seo",
     "release:verify": "pnpm run verify && pnpm run test:e2e && pnpm run audit"
   },

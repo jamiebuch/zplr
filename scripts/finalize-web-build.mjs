@@ -34,6 +34,12 @@ for (const [filename, [width, height]] of Object.entries(expectedFaviconPngs)) {
   const bytes = await readFile(path.join(outputDirectory, filename));
   assert.deepEqual(pngDimensions(bytes), { width, height }, `${filename} has unexpected dimensions`);
 }
+const documentationSocialImage = await readFile(path.join(outputDirectory, "og.png"));
+assert.deepEqual(
+  pngDimensions(documentationSocialImage),
+  { width: 1200, height: 630 },
+  "og.png has unexpected dimensions",
+);
 const faviconIco = await readFile(path.join(outputDirectory, "favicon.ico"));
 assert.equal(faviconIco.subarray(0, 6).toString("hex"), "000001000100", "favicon.ico has an invalid header");
 const faviconSvg = await readFile(path.join(outputDirectory, "favicon.svg"), "utf8");
@@ -102,20 +108,43 @@ await writeFile(path.join(outputDirectory, "robots.txt"), [
   `Sitemap: ${canonicalOrigin}/sitemap.xml`,
   "",
 ].join("\n"));
-await writeFile(path.join(outputDirectory, "sitemap.xml"), [
-  '<?xml version="1.0" encoding="UTF-8"?>',
-  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-  "  <url>",
-  `    <loc>${canonicalOrigin}/</loc>`,
-  "  </url>",
-  "</urlset>",
-  "",
-].join("\n"));
-
 const htmlFiles = await findFiles(outputDirectory, (filename) => filename.endsWith(".html"));
 assert.ok(htmlFiles.some((filename) => filename.endsWith("index.html")), "generated index.html is missing");
 assert.ok(htmlFiles.some((filename) => filename.endsWith("editor.html")), "generated editor.html is missing");
 assert.equal(await fileExists(path.join(outputDirectory, "404.html")), true, "generated 404.html is missing");
+const commandHtmlFiles = htmlFiles.filter((filename) =>
+  path.relative(outputDirectory, filename).replaceAll(path.sep, "/").startsWith("zpl-commands/"));
+assert.equal(commandHtmlFiles.length, 223, "generated command detail page count is incorrect");
+assert.equal(await fileExists(path.join(outputDirectory, "zpl-commands.html")), true, "generated command index is missing");
+assert.equal(await fileExists(path.join(outputDirectory, "zpl-commands", "caret-fo.html")), true, "generated ^FO page is missing");
+assert.equal(await fileExists(path.join(outputDirectory, "zpl-commands", "tilde-dg.html")), true, "generated ~DG page is missing");
+const commandIndexData = JSON.parse(
+  await readFile(path.join(outputDirectory, "zpl-command-index.json"), "utf8"),
+);
+assert.equal(commandIndexData.length, 223, "generated client command index is incomplete");
+assert.equal(new Set(commandIndexData.map(({ slug }) => slug)).size, 223, "generated client command slugs are not unique");
+
+const sitemapRoutes = htmlFiles.flatMap((filename) => {
+  const relative = path.relative(outputDirectory, filename).replaceAll(path.sep, "/");
+  if (relative === "index.html") return ["/"];
+  if (relative === "zpl-commands.html") return ["/zpl-commands"];
+  if (relative.startsWith("zpl-commands/") && relative.endsWith(".html")) {
+    return [`/${relative.slice(0, -".html".length)}`];
+  }
+  return [];
+}).sort((left, right) => left === "/" ? -1 : right === "/" ? 1 : left.localeCompare(right));
+await writeFile(path.join(outputDirectory, "sitemap.xml"), [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+  ...sitemapRoutes.flatMap((route) => [
+    "  <url>",
+    `    <loc>${canonicalOrigin}${route}</loc>`,
+    "  </url>",
+  ]),
+  "</urlset>",
+  "",
+].join("\n"));
+
 const inlineScriptHashes = new Set();
 for (const htmlFile of htmlFiles) {
   const html = await readFile(htmlFile, "utf8");
@@ -148,6 +177,15 @@ const editorHtml = await readFile(path.join(outputDirectory, "editor.html"), "ut
 assert.match(editorHtml, /noindex, follow/);
 assert.match(editorHtml, /Opening the local ZPL editor/);
 assert.match(editorHtml, /<link(?=[^>]*rel="icon")(?=[^>]*href="\/favicon-96x96\.png")[^>]*>/);
+const commandIndexHtml = await readFile(path.join(outputDirectory, "zpl-commands.html"), "utf8");
+assert.match(commandIndexHtml, /Every ZPL command, explained and ready to render/);
+assert.match(commandIndexHtml, /rel="canonical" href="https:\/\/zplr\.de\/zpl-commands"/);
+assert.match(commandIndexHtml, /property="og:image" content="https:\/\/zplr\.de\/og\.png"/);
+const fieldOriginHtml = await readFile(path.join(outputDirectory, "zpl-commands", "caret-fo.html"), "utf8");
+assert.match(fieldOriginHtml, /\^FO Field Origin/);
+assert.match(fieldOriginHtml, /Edit in editor/);
+assert.match(fieldOriginHtml, /application\/ld\+json/);
+assert.match(fieldOriginHtml, /property="og:image" content="https:\/\/zplr\.de\/og\.png"/);
 assert.equal(await fileExists(path.join(outputDirectory, "_worker.js")), false, "static output must not contain a Pages Worker");
 
 console.log(

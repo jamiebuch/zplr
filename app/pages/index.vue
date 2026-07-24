@@ -18,6 +18,7 @@
           <a href="#features" class="landing-nav-link">Workflow</a>
           <a href="#designer" class="landing-nav-link">Designer</a>
           <a href="#library" class="landing-nav-link">Library</a>
+          <NuxtLink to="/zpl-commands" class="landing-nav-link">Commands</NuxtLink>
         </div>
         <div class="ml-auto flex items-center gap-2">
           <a
@@ -481,6 +482,7 @@
           </div>
           <nav class="flex flex-wrap gap-x-6 gap-y-3 text-sm" aria-label="Footer navigation">
             <NuxtLink to="/editor" class="hover:text-white">Editor</NuxtLink>
+            <NuxtLink to="/zpl-commands" class="hover:text-white">ZPL commands</NuxtLink>
             <a href="https://www.npmjs.com/package/zplr" target="_blank" rel="noreferrer" class="hover:text-white">npm</a>
             <a href="https://github.com/le2ni/zplr" target="_blank" rel="noreferrer" class="hover:text-white">GitHub</a>
             <a href="https://github.com/le2ni/zplr/blob/main/docs/COMMAND_SUPPORT.md" target="_blank" rel="noreferrer" class="hover:text-white">Command support</a>

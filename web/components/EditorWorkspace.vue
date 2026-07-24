@@ -26,6 +26,9 @@
       </div>
 
       <div class="ml-auto flex items-center gap-0.5 sm:gap-1">
+        <a class="toolbar-button hidden sm:inline-flex" href="/zpl-commands" title="Open the complete ZPL command reference">
+          <span class="text-[11px] font-semibold">Docs</span>
+        </a>
         <button class="toolbar-button inline-flex lg:hidden" type="button" title="Create or edit variable data" @click="dataManagerOpen = true">
           <span class="text-[11px] font-semibold">Data</span>
           <span v-if="activeDataset" class="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] dark:bg-white/10">{{ activeRecordIndex + 1 }}/{{ activeDataset.records.length }}</span>
@@ -44,6 +47,20 @@
         </button>
       </div>
     </header>
+
+    <div
+      v-if="exampleImportNotice"
+      class="example-import-notice"
+      :class="exampleImportNotice.kind"
+      role="status"
+    >
+      <IconCheckCircleOutline v-if="exampleImportNotice.kind === 'success'" aria-hidden="true" />
+      <IconAlertCircleOutline v-else aria-hidden="true" />
+      <span>{{ exampleImportNotice.message }}</span>
+      <button type="button" aria-label="Dismiss example import notice" @click="exampleImportNotice = undefined">
+        <IconClose aria-hidden="true" />
+      </button>
+    </div>
 
     <nav class="flex h-10 shrink-0 items-center border-b border-zinc-200 bg-zinc-50 px-2 md:hidden dark:border-white/10 dark:bg-zinc-900" aria-label="Editor panes">
       <button class="mobile-pane-tab" :class="{ active: mobilePane === 'code' }" type="button" @click="showEditorCode">
@@ -784,6 +801,7 @@ const settingsOpen = ref(false);
 const dataManagerOpen = ref(false);
 const resourceManagerOpen = ref(false);
 const previewStale = ref(false);
+const exampleImportNotice = ref<{ kind: "success" | "error"; message: string }>();
 const editorComponent = ref<MonacoEditorApi | null>(null);
 const workbench = ref<HTMLElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -794,6 +812,7 @@ const renderLoadingThresholdMs = 250;
 let saveTimer: number | undefined;
 let resizeCleanup: (() => void) | undefined;
 let codeFocusFrame: number | undefined;
+let exampleNoticeTimer: number | undefined;
 
 const editorLimits = {
   maxDimension: 8_192,
@@ -1132,6 +1151,44 @@ function addDocument(nextSource: string, nextFilename: string, sampleId?: Sample
   documents.value.push(document);
   activateDocument(document.id);
   return document;
+}
+
+function showExampleImportNotice(kind: "success" | "error", message: string): void {
+  exampleImportNotice.value = { kind, message };
+  if (exampleNoticeTimer !== undefined) window.clearTimeout(exampleNoticeTimer);
+  exampleNoticeTimer = window.setTimeout(() => {
+    exampleImportNotice.value = undefined;
+  }, 6_000);
+}
+
+async function importDocumentationExampleFromUrl(): Promise<void> {
+  const url = new URL(window.location.href);
+  const exampleId = url.searchParams.get("example")?.trim();
+  if (!exampleId) return;
+
+  url.searchParams.delete("example");
+  const remainingQuery = url.searchParams.toString();
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${url.pathname}${remainingQuery ? `?${remainingQuery}` : ""}${url.hash}`,
+  );
+
+  try {
+    const { getZplDocumentationExample } = await import("../zplDocumentation");
+    const example = getZplDocumentationExample(exampleId);
+    if (!example) {
+      showExampleImportNotice("error", "That documentation example could not be found. Your workspace was not changed.");
+      return;
+    }
+    const document = addDocument(example.source, example.filename);
+    document.cursorPosition = Math.max(0, Math.min(example.source.length, example.cursorOffset));
+    showExampleImportNotice("success", `${example.command} example opened as ${document.filename}.`);
+    await nextTick();
+    editorComponent.value?.focus();
+  } catch {
+    showExampleImportNotice("error", "The documentation example could not be opened. Your existing labels are unchanged.");
+  }
 }
 
 function loadSample(id: SampleId): void {
@@ -1880,6 +1937,7 @@ watch(splitPercent, applySplit);
 onMounted(() => {
   persistEditorPreferences();
   schedulePreview(0);
+  void importDocumentationExampleFromUrl();
   window.addEventListener("keydown", handleKeyboardShortcut, true);
   window.addEventListener("resize", applySplit);
   applySplit();
@@ -1889,6 +1947,7 @@ onBeforeUnmount(() => {
   renderSequence++;
   if (renderTimer !== undefined) window.clearTimeout(renderTimer);
   if (saveTimer !== undefined) window.clearTimeout(saveTimer);
+  if (exampleNoticeTimer !== undefined) window.clearTimeout(exampleNoticeTimer);
   if (codeFocusFrame !== undefined) window.cancelAnimationFrame(codeFocusFrame);
   resizeCleanup?.();
   window.removeEventListener("keydown", handleKeyboardShortcut, true);
@@ -1897,6 +1956,51 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.example-import-notice {
+  display: flex;
+  min-height: 2.35rem;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.55rem;
+  border-bottom: 1px solid rgb(187 247 208);
+  background: rgb(240 253 244);
+  padding: 0.45rem 0.75rem;
+  color: rgb(21 128 61);
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.example-import-notice > svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.example-import-notice.error {
+  border-color: rgb(254 205 211);
+  background: rgb(255 241 242);
+  color: rgb(190 18 60);
+}
+
+.example-import-notice button {
+  margin-left: auto;
+  display: inline-grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 0.35rem;
+}
+
+.example-import-notice button:hover {
+  background: rgb(0 0 0 / 0.06);
+}
+
+.example-import-notice button svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
 .toolbar-button {
   align-items: center;
   justify-content: center;
@@ -2438,6 +2542,18 @@ kbd { border: 1px solid rgb(212 212 216); border-bottom-width: 2px; border-radiu
 }
 
 @media (prefers-color-scheme: dark) {
+  .example-import-notice {
+    border-color: rgb(20 83 45);
+    background: rgb(5 46 22);
+    color: rgb(134 239 172);
+  }
+
+  .example-import-notice.error {
+    border-color: rgb(136 19 55);
+    background: rgb(76 5 25);
+    color: rgb(253 164 175);
+  }
+
   .toolbar-button { color: rgb(161 161 170); }
   .icon-button-small, .mobile-pane-tab, .open-editor-row, .editor-tab, .command-back, .command-doc-heading { color: rgb(161 161 170); }
   .record-navigator { border-color: rgb(255 255 255 / 0.1); background: rgb(24 24 27); }
