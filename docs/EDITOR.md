@@ -15,9 +15,9 @@ Layers and Properties share the right panel. Deselecting a field returns to Laye
 
 ## Variable data
 
-Open **Data** to create a dataset or import CSV/JSON. Columns bind to numbered `^FN` fields; prompts such as `^FN1"Customer"` become column labels where possible.
+Expand **Data** in the left sidebar to choose a dataset or preview record. The section starts collapsed. Use **Create or import data** or **Edit data** to open the focused data editor for datasets, columns, and records. Columns bind to numbered `^FN` fields; prompts such as `^FN1"Customer"` become column labels where possible.
 
-The record navigator switches the live preview without changing the ZPL. Editing bound text on the label updates the active record. Export can produce CSV or a ZIP of rendered PNGs for up to 500 records.
+The sidebar record navigator switches the live preview without changing the ZPL. Editing bound text on the label updates the active record. The active dataset can also be removed there after confirmation. CSV export stays in the Data section, and **Export PNGs** appears once the active dataset has records and at least one column is linked to a `^FN` placeholder. PNG export produces a ZIP for up to 500 records.
 
 ## Images and fonts
 

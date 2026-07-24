@@ -253,13 +253,19 @@ test("keeps Files sections collapsible with Outline closed initially", async ({ 
   await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });
 
   const openEditors = page.getByRole("button", { name: /^Open editors/ });
+  const data = page.getByRole("button", { name: /^Data \d+$/ });
   const examples = page.getByRole("button", { name: /^Examples/ });
   const outline = page.getByRole("button", { name: /^Outline/ });
   await expect(openEditors).toHaveAttribute("aria-expanded", "true");
+  await expect(data).toHaveAttribute("aria-expanded", "false");
   await expect(examples).toHaveAttribute("aria-expanded", "true");
   await expect(outline).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("button", { name: "Create or import data", exact: true })).toBeHidden();
   await expect(page.getByRole("button", { name: /^1 \^XA Start Format$/ })).toBeHidden();
 
+  await data.click();
+  await expect(data).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Create or import data", exact: true })).toBeVisible();
   await outline.click();
   await expect(outline).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("button", { name: /^1 \^XA Start Format$/ })).toBeVisible();
@@ -1167,12 +1173,21 @@ test("binds visual text to live variable-data records", async ({ page }) => {
   await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });
   await page.keyboard.press("Control+N");
 
-  await page.getByTitle("Variable data and batch preview").click();
+  const dataSection = page.getByRole("button", { name: /^Data \d+$/ });
+  await expect(dataSection).toHaveAttribute("aria-expanded", "false");
+  await dataSection.click();
+  await expect(page.getByRole("button", { name: "Export PNGs", exact: true })).toBeHidden();
+  await page.getByRole("button", { name: "Create or import data", exact: true }).click();
   const dataDialog = page.getByRole("dialog", { name: "Variable data", exact: true });
   await expect(dataDialog).toBeVisible();
   await dataDialog.locator(".data-welcome").getByRole("button", { name: "New dataset", exact: true }).click();
   await dataDialog.getByLabel("Field 1 for Record 1", { exact: true }).fill("Ada Lovelace");
+  await expect(dataDialog.getByRole("button", { name: "Batch PNGs", exact: true })).toHaveCount(0);
+  await expect(dataDialog.getByRole("button", { name: "Export CSV", exact: true })).toHaveCount(0);
   await dataDialog.getByTitle("Close variable data").click();
+  await expect(page.getByRole("button", { name: "Edit data", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export CSV", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export PNGs", exact: true })).toBeHidden();
 
   const variableField = page.getByRole("button", { name: "Text at 40, 40", exact: true });
   await variableField.focus();
@@ -1182,18 +1197,24 @@ test("binds visual text to live variable-data records", async ({ page }) => {
   await expect(editorSurface).toContainText("^FN1");
   await expect(page.getByLabel("Record 1 value", { exact: true })).toHaveValue("Ada Lovelace");
   await page.getByLabel("Record 1 value", { exact: true }).fill("Grace Hopper");
+  await expect(page.getByRole("button", { name: "Export PNGs", exact: true })).toBeVisible();
 
-  await page.getByTitle("Variable data and batch preview").click();
+  await page.getByRole("button", { name: "Edit data", exact: true }).click();
   await expect(dataDialog.getByLabel("Field 1 for Record 1", { exact: true })).toHaveValue("Grace Hopper");
   await dataDialog.getByRole("button", { name: "Add record", exact: true }).click();
   await dataDialog.getByLabel("Field 1 for Record 2", { exact: true }).fill("Lord Byron");
-  await expect(dataDialog.getByRole("button", { name: "Batch PNGs", exact: true })).toBeEnabled();
   await dataDialog.getByTitle("Close variable data").click();
 
   await expect(page.getByLabel("Variable-data record navigator")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export PNGs", exact: true })).toBeVisible();
   await expect(page.getByLabel("Record 2 value", { exact: true })).toHaveValue("Lord Byron");
   await page.getByTitle("Previous record").click();
   await expect(page.getByLabel("Record 1 value", { exact: true })).toHaveValue("Grace Hopper");
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Remove dataset", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Create or import data", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Export PNGs", exact: true })).toBeHidden();
 });
 
 test("imports, places, and atomically renames an image resource", async ({ page }) => {
@@ -1271,7 +1292,8 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(results.violations).toEqual([]);
 
     await page.getByTitle("Close shortcuts").click();
-    await page.getByTitle("Variable data and batch preview").click();
+    await page.getByRole("button", { name: /^Data \d+$/ }).click();
+    await page.getByRole("button", { name: "Create or import data", exact: true }).click();
     const dataDialog = page.getByRole("dialog", { name: "Variable data", exact: true });
     await expect(dataDialog).toBeVisible();
     results = await new AxeBuilder({ page })

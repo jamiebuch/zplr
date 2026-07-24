@@ -161,7 +161,8 @@ test("captures current editor assets and records their provenance", async ({ pag
     );
 
     await reloadEditor(page, colorScheme);
-    await page.getByTitle("Variable data and batch preview").click();
+    await page.getByRole("button", { name: /^Data \d+$/ }).click();
+    await page.getByRole("button", { name: "Create or import data", exact: true }).click();
     const dataDialog = page.getByRole("dialog", { name: "Variable data", exact: true });
     await expect(dataDialog).toBeVisible();
     await dataDialog.locator(".data-welcome").getByRole("button", { name: "New dataset", exact: true }).click();
@@ -173,7 +174,6 @@ test("captures current editor assets and records their provenance", async ({ pag
     await dataDialog.getByRole("button", { name: "Add record", exact: true }).click();
     await dataDialog.getByLabel("Field 1 for Record 2", { exact: true }).fill("Grace Hopper");
     await dataDialog.getByLabel("Order for Record 2", { exact: true }).fill("ZPL-1043");
-    await expect(dataDialog.getByRole("button", { name: "Batch PNGs", exact: true })).toBeEnabled();
     await captureElementTop(
       page,
       dataDialog,

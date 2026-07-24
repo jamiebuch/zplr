@@ -4,7 +4,7 @@
       <header class="data-header">
         <div>
           <h2 id="variable-data-title">Variable data</h2>
-          <p>Bind columns to <code>^FN</code> fields and preview or export every record.</p>
+          <p>Create datasets, import files, and edit columns or records.</p>
         </div>
         <button class="data-icon-button" type="button" title="Close variable data" aria-label="Close variable data" @click="emit('close')">
           <IconClose aria-hidden="true" />
@@ -21,8 +21,6 @@
         </div>
         <button type="button" @click="addDataset">New dataset</button>
         <button type="button" @click="importInput?.click()">Import CSV / JSON</button>
-        <button type="button" :disabled="!activeDataset" @click="exportCsv">Export CSV</button>
-        <button class="data-primary" type="button" :disabled="!activeDataset?.records.length" @click="emit('batchPreview')">Batch PNGs</button>
         <input ref="importInput" class="sr-only" type="file" accept=".csv,.json,text/csv,application/json" aria-label="Import variable data file" @change="importFile" />
       </div>
 
@@ -128,7 +126,6 @@ import {
   createVariableRecord,
   importVariableDataset,
   normalizeVariableData,
-  variableDatasetToCsv,
   type DocumentVariableData,
   type VariableColumn,
   type ZplFieldBinding,
@@ -142,7 +139,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:modelValue": [value: DocumentVariableData];
   close: [];
-  batchPreview: [];
 }>();
 
 const importInput = ref<HTMLInputElement | null>(null);
@@ -281,17 +277,6 @@ async function importFile(event: Event): Promise<void> {
   }
 }
 
-function exportCsv(): void {
-  const dataset = activeDataset.value;
-  if (!dataset) return;
-  const blob = new Blob([variableDatasetToCsv(dataset)], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${dataset.name.replace(/[^a-z0-9_-]+/gi, "-") || "dataset"}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
 </script>
 
 <style scoped>
@@ -308,7 +293,6 @@ function exportCsv(): void {
 .data-select-wrap select { width: 100%; appearance: none; padding-right: 2rem; }
 .data-select-icon { position: absolute; top: 50%; right: 0.55rem; width: 0.9rem; height: 0.9rem; transform: translateY(-50%); pointer-events: none; color: rgb(82 82 91); }
 .data-toolbar button, .data-toolbar select, .data-welcome button { min-height: 2rem; border: 1px solid rgb(212 212 216); border-radius: 0.45rem; background: white; padding-inline: 0.65rem; font-size: 0.68rem; font-weight: 600; }
-.data-toolbar .data-primary { margin-left: auto; border-color: rgb(24 24 27); background: rgb(24 24 27); color: white; }
 .data-toolbar button:disabled { cursor: not-allowed; opacity: 0.4; }
 .data-body { display: flex; min-height: 0; flex: 1; }
 .data-sidebar { width: 15rem; flex: 0 0 auto; overflow-y: auto; border-right: 1px solid rgb(228 228 231); padding: 0.8rem; }
@@ -377,7 +361,6 @@ function exportCsv(): void {
   .data-table-actions button { color: rgb(212 212 216); }
   .data-danger, .data-row-delete { color: rgb(251 113 133); }
   .data-column-delete:hover, .data-row-delete:hover { background: rgb(255 255 255 / 0.08); color: white; }
-  .data-toolbar .data-primary { border-color: white; background: white; color: rgb(9 9 11); }
   .data-table input:focus, .data-table textarea:focus { background: rgb(24 24 27); color: white; }
   .data-table tbody tr.active, .data-table tbody tr.active th { background: rgb(59 130 246 / 0.12); }
   .data-welcome strong { color: white; }

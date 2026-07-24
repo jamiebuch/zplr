@@ -26,21 +26,7 @@
       </div>
 
       <div class="ml-auto flex items-center gap-0.5 sm:gap-1">
-        <div v-if="activeDataset" class="record-navigator hidden items-center sm:flex" aria-label="Variable-data record navigator">
-          <button type="button" title="Previous record" aria-label="Previous record" :disabled="activeRecordIndex <= 0" @click="activateRelativeRecord(-1)">
-            <IconChevronLeft aria-hidden="true" />
-          </button>
-          <div class="record-select-wrap">
-            <select :value="activeRecord?.id" aria-label="Preview record" @change="selectActiveRecord">
-              <option v-for="(record, index) in activeDataset.records" :key="record.id" :value="record.id">{{ index + 1 }} · {{ record.name }}</option>
-            </select>
-            <IconChevronDown class="record-select-icon" aria-hidden="true" />
-          </div>
-          <button type="button" title="Next record" aria-label="Next record" :disabled="activeRecordIndex < 0 || activeRecordIndex >= activeDataset.records.length - 1" @click="activateRelativeRecord(1)">
-            <IconChevronRight aria-hidden="true" />
-          </button>
-        </div>
-        <button class="toolbar-button inline-flex" type="button" title="Variable data and batch preview" @click="dataManagerOpen = true">
+        <button class="toolbar-button inline-flex lg:hidden" type="button" title="Create or edit variable data" @click="dataManagerOpen = true">
           <span class="text-[11px] font-semibold">Data</span>
           <span v-if="activeDataset" class="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[9px] dark:bg-white/10">{{ activeRecordIndex + 1 }}/{{ activeDataset.records.length }}</span>
         </button>
@@ -113,6 +99,83 @@
                   <IconClose class="size-3.5" aria-hidden="true" /><span class="sr-only">Close {{ document.filename }}</span>
                 </button>
               </div>
+            </div>
+          </section>
+
+          <section class="mt-3 border-t border-zinc-200 pt-2 dark:border-white/10">
+            <div class="sidebar-heading">
+              <button class="sidebar-section-toggle" type="button" :aria-expanded="sidebarSections.data" @click="sidebarSections.data = !sidebarSections.data">
+                <IconChevronRight class="sidebar-section-chevron size-3.5" :class="{ open: sidebarSections.data }" aria-hidden="true" />
+                <span>Data</span>
+                <span class="font-normal text-zinc-500">{{ activeDocument.variableData.datasets.length }}</span>
+              </button>
+            </div>
+            <div v-show="sidebarSections.data" class="sidebar-data-panel">
+              <template v-if="activeDataset">
+                <label class="sidebar-data-label">
+                  <span>Dataset</span>
+                  <span class="sidebar-data-select-wrap">
+                    <select :value="activeDataset.id" aria-label="Active variable dataset" @change="selectActiveDataset">
+                      <option v-for="dataset in activeDocument.variableData.datasets" :key="dataset.id" :value="dataset.id">{{ dataset.name }}</option>
+                    </select>
+                    <IconChevronDown aria-hidden="true" />
+                  </span>
+                </label>
+
+                <div class="sidebar-data-summary">
+                  <strong>{{ activeDataset.records.length }}</strong>
+                  record{{ activeDataset.records.length === 1 ? "" : "s" }}
+                  <span aria-hidden="true">·</span>
+                  <strong>{{ activeDataset.columns.length }}</strong>
+                  column{{ activeDataset.columns.length === 1 ? "" : "s" }}
+                </div>
+
+                <span class="sidebar-data-label-text">Preview record</span>
+                <div class="record-navigator flex items-center" aria-label="Variable-data record navigator">
+                  <button type="button" title="Previous record" aria-label="Previous record" :disabled="activeRecordIndex <= 0" @click="activateRelativeRecord(-1)">
+                    <IconChevronLeft aria-hidden="true" />
+                  </button>
+                  <div class="record-select-wrap">
+                    <select :value="activeRecord?.id" aria-label="Preview record" @change="selectActiveRecord">
+                      <option v-for="(record, index) in activeDataset.records" :key="record.id" :value="record.id">{{ index + 1 }} · {{ record.name }}</option>
+                    </select>
+                    <IconChevronDown class="record-select-icon" aria-hidden="true" />
+                  </div>
+                  <button type="button" title="Next record" aria-label="Next record" :disabled="activeRecordIndex < 0 || activeRecordIndex >= activeDataset.records.length - 1" @click="activateRelativeRecord(1)">
+                    <IconChevronRight aria-hidden="true" />
+                  </button>
+                </div>
+
+                <p v-if="!zplFieldBindings.length" class="sidebar-data-status">
+                  Bind a visual layer to a column to add a <code>^FN</code> placeholder.
+                </p>
+                <p v-else class="sidebar-data-status" :class="{ ready: canExportVariablePngs }">
+                  {{ linkedVariableBindings.length }} of {{ zplFieldBindings.length }}
+                  placeholder{{ zplFieldBindings.length === 1 ? "" : "s" }} linked
+                </p>
+
+                <div class="sidebar-data-actions">
+                  <button class="sidebar-data-button" type="button" @click="dataManagerOpen = true">
+                    <IconDatabaseEditOutline aria-hidden="true" /> Edit data
+                  </button>
+                  <button class="sidebar-data-button" type="button" @click="downloadActiveDatasetCsv">
+                    <IconFileDelimitedOutline aria-hidden="true" /> Export CSV
+                  </button>
+                  <button v-if="canExportVariablePngs" class="sidebar-data-button primary" type="button" @click="downloadBatchPngs">
+                    <IconDownloadMultipleOutline aria-hidden="true" /> Export PNGs
+                    <span class="sidebar-data-count" aria-hidden="true">{{ activeDataset.records.length }}</span>
+                  </button>
+                  <button class="sidebar-data-button danger" type="button" @click="removeActiveDataset">
+                    <IconDatabaseRemoveOutline aria-hidden="true" /> Remove dataset
+                  </button>
+                </div>
+              </template>
+              <template v-else>
+                <p class="sidebar-data-empty">Create a dataset or import CSV/JSON to drive reusable label placeholders.</p>
+                <button class="sidebar-data-button primary" type="button" @click="dataManagerOpen = true">
+                  <IconDatabasePlusOutline aria-hidden="true" /> Create or import data
+                </button>
+              </template>
             </div>
           </section>
 
@@ -362,7 +425,6 @@
       :model-value="activeDocument.variableData"
       :detected-bindings="zplFieldBindings"
       @update:model-value="updateVariableData"
-      @batch-preview="downloadBatchPngs"
       @close="dataManagerOpen = false"
     />
 
@@ -516,6 +578,11 @@ import {
   IconCodeTags,
   IconCogOutline,
   IconContentCopy,
+  IconDatabaseEditOutline,
+  IconDatabasePlusOutline,
+  IconDatabaseRemoveOutline,
+  IconDownloadMultipleOutline,
+  IconFileDelimitedOutline,
   IconFileDocumentOutline,
   IconFileOutline,
   IconFolderOpenOutline,
@@ -708,7 +775,7 @@ const codeFocused = ref(false);
 const visualInteractionActive = ref(false);
 const problemsOpen = ref(false);
 const sidebarMode = ref<"files" | "commands">("files");
-const sidebarSections = ref({ editors: true, examples: true, outline: false });
+const sidebarSections = ref({ editors: true, data: false, examples: true, outline: false });
 const commandQuery = ref("");
 const selectedCommand = ref<string>();
 const mobilePane = ref<"code" | "visual">("code");
@@ -752,6 +819,13 @@ const activeRecord = computed(() => activeVariableRecord(activeDataset.value));
 const activeRecordIndex = computed(() => activeDataset.value?.records.findIndex(({ id }) => id === activeRecord.value?.id) ?? -1);
 const activeFieldValues = computed(() => fieldValuesForVariableData(activeDocument.value.variableData));
 const zplFieldBindings = computed(() => collectZplFieldBindings(source.value));
+const linkedVariableBindings = computed(() => {
+  const fieldNumbers = new Set(activeDataset.value?.columns.map(({ fieldNumber }) => fieldNumber) ?? []);
+  return zplFieldBindings.value.filter(({ fieldNumber }) => fieldNumbers.has(fieldNumber));
+});
+const canExportVariablePngs = computed(() =>
+  Boolean(activeDataset.value?.records.length && linkedVariableBindings.value.length)
+);
 const languageDiagnostics = computed<readonly ZplDiagnostic[]>(() =>
   validateZplParameters(source.value).map((diagnostic) => ({
     code: diagnostic.code,
@@ -1337,7 +1411,7 @@ async function downloadAllPngs(): Promise<void> {
 
 async function downloadBatchPngs(): Promise<void> {
   const dataset = activeDataset.value;
-  if (!dataset?.records.length) return;
+  if (!dataset?.records.length || !canExportVariablePngs.value) return;
   if (dataset.records.length > 500) {
     window.alert("Batch preview is limited to 500 records per export.");
     return;
@@ -1462,9 +1536,34 @@ function updateVariableData(value: DocumentVariableData): void {
   activeDocument.value.variableData = normalizeVariableData(value);
 }
 
+function selectActiveDataset(event: Event): void {
+  const id = (event.currentTarget as HTMLSelectElement).value;
+  if (activeDocument.value.variableData.datasets.some((dataset) => dataset.id === id)) {
+    activeDocument.value.variableData.activeDatasetId = id;
+  }
+}
+
 function selectActiveRecord(event: Event): void {
   const id = (event.currentTarget as HTMLSelectElement).value;
   if (activeDataset.value?.records.some((record) => record.id === id)) activeDataset.value.activeRecordId = id;
+}
+
+function downloadActiveDatasetCsv(): void {
+  const dataset = activeDataset.value;
+  if (!dataset) return;
+  const name = dataset.name.replace(/[^a-z0-9_-]+/gi, "-") || "dataset";
+  downloadBlob(
+    new Blob([variableDatasetToCsv(dataset)], { type: "text/csv;charset=utf-8" }),
+    `${name}.csv`,
+  );
+}
+
+function removeActiveDataset(): void {
+  const dataset = activeDataset.value;
+  if (!dataset || !window.confirm(`Delete dataset “${dataset.name}”?`)) return;
+  const data = activeDocument.value.variableData;
+  data.datasets = data.datasets.filter(({ id }) => id !== dataset.id);
+  data.activeDatasetId = data.datasets[0]?.id;
 }
 
 function activateRelativeRecord(direction: number): void {
@@ -1847,6 +1946,7 @@ onBeforeUnmount(() => {
 .command-insert:focus-visible,
 .command-insert-primary:focus-visible,
 .command-back:focus-visible,
+.sidebar-data-button:focus-visible,
 .diagnostic-row:focus-visible,
 .status-button:focus-visible {
   outline: 2px solid rgb(113 113 122);
@@ -1915,6 +2015,165 @@ onBeforeUnmount(() => {
 .sidebar-section-chevron { flex: 0 0 auto; transition: transform 150ms ease; }
 .sidebar-section-chevron.open { transform: rotate(90deg); }
 .sidebar-section-toggle:focus-visible { border-radius: 0.25rem; outline: 2px solid rgb(113 113 122); outline-offset: -2px; }
+
+.sidebar-data-panel {
+  padding: 0.35rem 0.75rem 0.65rem;
+}
+
+.sidebar-data-label,
+.sidebar-data-label-text {
+  display: block;
+  color: rgb(113 113 122);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebar-data-select-wrap {
+  position: relative;
+  display: block;
+  margin-top: 0.3rem;
+}
+
+.sidebar-data-select-wrap select {
+  width: 100%;
+  height: 2rem;
+  appearance: none;
+  border: 1px solid rgb(212 212 216);
+  border-radius: 0.45rem;
+  background: white;
+  padding: 0 1.8rem 0 0.55rem;
+  color: rgb(63 63 70);
+  font-size: 0.7rem;
+  font-weight: 600;
+  outline: none;
+}
+
+.sidebar-data-select-wrap select:focus {
+  border-color: rgb(113 113 122);
+  box-shadow: 0 0 0 2px rgb(228 228 231);
+}
+
+.sidebar-data-select-wrap svg {
+  position: absolute;
+  top: 50%;
+  right: 0.45rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: rgb(113 113 122);
+}
+
+.sidebar-data-summary {
+  margin: 0.45rem 0 0.8rem;
+  color: rgb(113 113 122);
+  font-size: 0.62rem;
+}
+
+.sidebar-data-summary strong {
+  color: rgb(63 63 70);
+  font-weight: 700;
+}
+
+.sidebar-data-panel .record-navigator {
+  width: 100%;
+  margin-top: 0.3rem;
+}
+
+.sidebar-data-panel .record-select-wrap {
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 0%;
+}
+
+.sidebar-data-panel .record-navigator select {
+  max-width: none;
+}
+
+.sidebar-data-status,
+.sidebar-data-empty {
+  margin-top: 0.65rem;
+  color: rgb(113 113 122);
+  font-size: 0.62rem;
+  line-height: 1rem;
+}
+
+.sidebar-data-status code {
+  color: rgb(82 82 91);
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.sidebar-data-status.ready {
+  color: rgb(4 120 87);
+}
+
+.sidebar-data-actions {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+}
+
+.sidebar-data-button {
+  display: flex;
+  width: 100%;
+  min-height: 1.9rem;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgb(212 212 216);
+  border-radius: 0.45rem;
+  background: white;
+  padding: 0.35rem 0.55rem;
+  color: rgb(82 82 91);
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.sidebar-data-button:hover {
+  border-color: rgb(161 161 170);
+  color: rgb(24 24 27);
+}
+
+.sidebar-data-button.primary {
+  margin-top: 0.35rem;
+  border-color: rgb(24 24 27);
+  background: rgb(24 24 27);
+  color: white;
+}
+
+.sidebar-data-button.primary:hover {
+  background: rgb(63 63 70);
+}
+
+.sidebar-data-button.danger {
+  margin-top: 0.35rem;
+  border-color: transparent;
+  background: transparent;
+  color: rgb(190 18 60);
+}
+
+.sidebar-data-button.danger:hover {
+  border-color: rgb(253 164 175);
+  background: rgb(255 241 242);
+  color: rgb(159 18 57);
+}
+
+.sidebar-data-button svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 auto;
+}
+
+.sidebar-data-count {
+  margin-left: auto;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.16);
+  padding: 0.05rem 0.35rem;
+  font-size: 0.55rem;
+}
 
 .file-row {
   display: flex;
@@ -2189,6 +2448,20 @@ kbd { border: 1px solid rgb(212 212 216); border-bottom-width: 2px; border-radiu
   .sidebar-tab { color: rgb(161 161 170); }
   .sidebar-tab.active { border-bottom-color: white; color: white; }
   .sidebar-heading { color: rgb(161 161 170); }
+  .sidebar-data-label, .sidebar-data-label-text, .sidebar-data-summary, .sidebar-data-status, .sidebar-data-empty { color: rgb(161 161 170); }
+  .sidebar-data-summary strong, .sidebar-data-status code { color: rgb(212 212 216); }
+  .sidebar-data-status.ready { color: rgb(52 211 153); }
+  .sidebar-data-select-wrap select, .sidebar-data-button {
+    border-color: rgb(255 255 255 / 0.1);
+    background: rgb(9 9 11);
+    color: rgb(212 212 216);
+  }
+  .sidebar-data-select-wrap select:focus { border-color: rgb(113 113 122); box-shadow: 0 0 0 2px rgb(255 255 255 / 0.08); }
+  .sidebar-data-button:hover { border-color: rgb(113 113 122); color: white; }
+  .sidebar-data-button.primary { border-color: white; background: white; color: rgb(9 9 11); }
+  .sidebar-data-button.primary:hover { background: rgb(228 228 231); }
+  .sidebar-data-button.danger { border-color: transparent; background: transparent; color: rgb(251 113 133); }
+  .sidebar-data-button.danger:hover { border-color: rgb(159 18 57); background: rgb(76 5 25 / 0.3); color: rgb(253 164 175); }
   .file-row { color: rgb(161 161 170); }
   .file-row:hover, .file-row.selected, .file-row.active, .open-editor-row:hover, .open-editor-row.active, .outline-row:hover, .command-row:hover { background: rgb(255 255 255 / 0.06); color: white; }
   .command-insert:hover { background: rgb(255 255 255 / 0.08); color: white; }
