@@ -48,6 +48,23 @@ for (let attempt = 1; attempt <= 12; attempt++) {
     assert.match(pageHtml, /rel="canonical" href="https:\/\/zplr\.de\/"/);
     assert.match(pageHtml, /application\/ld\+json/);
     assert.match(pageHtml, /Node\.js ZPL renderer/);
+    assert.match(pageHtml, /<link(?=[^>]*rel="icon")(?=[^>]*href="\/favicon-96x96\.png")[^>]*>/);
+    assert.doesNotMatch(pageHtml, /<link[^>]*rel="icon"[^>]*href="data:/);
+
+    for (const [filename, [width, height]] of Object.entries({
+      "favicon-96x96.png": [96, 96],
+      "apple-touch-icon.png": [180, 180],
+    })) {
+      const faviconResponse = await fetch(new URL(`/${filename}`, baseUrl), { cache: "no-store" });
+      assert.equal(faviconResponse.ok, true, `${filename} returned ${faviconResponse.status}`);
+      assert.match(faviconResponse.headers.get("content-type") ?? "", /^image\/png/);
+      const faviconBytes = Buffer.from(await faviconResponse.arrayBuffer());
+      assert.equal(faviconBytes.readUInt32BE(16), width);
+      assert.equal(faviconBytes.readUInt32BE(20), height);
+    }
+    const faviconIcoResponse = await fetch(new URL("/favicon.ico", baseUrl), { cache: "no-store" });
+    assert.equal(faviconIcoResponse.ok, true, `favicon.ico returned ${faviconIcoResponse.status}`);
+    assert.match(faviconIcoResponse.headers.get("content-type") ?? "", /^image\/(x-icon|vnd\.microsoft\.icon)/);
 
     const screenshotManifestResponse = await fetch(new URL(manifest.screenshots.manifest, baseUrl), { cache: "no-store" });
     assert.equal(screenshotManifestResponse.ok, true, `screenshot manifest returned ${screenshotManifestResponse.status}`);

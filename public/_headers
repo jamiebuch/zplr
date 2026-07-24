@@ -11,6 +11,12 @@
 /screenshots/*
   Cache-Control: public, max-age=0, must-revalidate
 
+/favicon*
+  Cache-Control: public, max-age=86400
+
+/apple-touch-icon.png
+  Cache-Control: public, max-age=86400
+
 /version.json
   Cache-Control: no-store
 

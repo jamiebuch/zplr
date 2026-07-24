@@ -49,6 +49,14 @@ test("renders locally and links to the dedicated editor route", async ({ page, r
 
   const landingResponse = await page.goto("/");
   expect(landingResponse?.headers()["content-security-policy"]).toMatch(/script-src 'self' 'sha256-/);
+  await expect(page.locator('head link[rel="icon"][href="/favicon-96x96.png"]'))
+    .toHaveAttribute("sizes", "96x96");
+  const faviconResponse = await request.get("/favicon-96x96.png");
+  expect(faviconResponse.ok()).toBe(true);
+  expect(faviconResponse.headers()["content-type"]).toMatch(/^image\/png/);
+  const faviconBytes = await faviconResponse.body();
+  expect({ width: faviconBytes.readUInt32BE(16), height: faviconBytes.readUInt32BE(20) })
+    .toEqual({ width: 96, height: 96 });
   await expect(page.getByRole("heading", { name: "Free Online ZPL Editor, Viewer & Visual Designer", exact: true })).toBeVisible();
   const heroBottom = await page.locator(".landing-hero").evaluate((hero) => hero.getBoundingClientRect().bottom);
   const viewportHeight = await page.evaluate(() => window.innerHeight);

@@ -82,6 +82,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "build": "tsdown",
     "build:web": "node scripts/build-web.mjs",
+    "favicons:generate": "node scripts/generate-favicons.mjs",
     "generate:web": "nuxt generate",
     "preview:web": "node scripts/serve-static.mjs",
     "typecheck:web": "nuxt prepare && vue-tsc --noEmit -p tsconfig.web.json",

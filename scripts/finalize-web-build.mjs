@@ -23,9 +23,21 @@ const expectedScreenshots = {
   "zpl-editor-social.png": [1200, 630],
   "zpl-editor-social-dark.png": [1200, 630],
 };
+const expectedFaviconPngs = {
+  "favicon-96x96.png": [96, 96],
+  "apple-touch-icon.png": [180, 180],
+};
 
 assert.ok(expectedRunId, "ZPLR_SCREENSHOT_RUN_ID is required");
 await stat(outputDirectory);
+for (const [filename, [width, height]] of Object.entries(expectedFaviconPngs)) {
+  const bytes = await readFile(path.join(outputDirectory, filename));
+  assert.deepEqual(pngDimensions(bytes), { width, height }, `${filename} has unexpected dimensions`);
+}
+const faviconIco = await readFile(path.join(outputDirectory, "favicon.ico"));
+assert.equal(faviconIco.subarray(0, 6).toString("hex"), "000001000100", "favicon.ico has an invalid header");
+const faviconSvg = await readFile(path.join(outputDirectory, "favicon.svg"), "utf8");
+assert.match(faviconSvg, /viewBox="-100 -100 1200 1200"/);
 const screenshotManifest = JSON.parse(await readFile(path.join(captureDirectory, "manifest.json"), "utf8"));
 assert.equal(screenshotManifest.version, 1);
 assert.equal(screenshotManifest.source, "captured");
@@ -128,11 +140,14 @@ assert.match(indexHtml, /Free Online ZPL Editor, Viewer &amp; Visual Designer/);
 assert.match(indexHtml, /rel="canonical" href="https:\/\/zplr\.de\/"/);
 assert.match(indexHtml, /application\/ld\+json/);
 assert.match(indexHtml, /Node\.js ZPL renderer/);
+assert.match(indexHtml, /<link(?=[^>]*rel="icon")(?=[^>]*href="\/favicon-96x96\.png")[^>]*>/);
+assert.doesNotMatch(indexHtml, /<link[^>]*rel="icon"[^>]*href="data:/);
 assert.match(indexHtml, /media="\(prefers-color-scheme: dark\)" srcset="\/screenshots\/zpl-editor-overview-dark\.png"/);
 assert.match(indexHtml, /media="\(prefers-color-scheme: dark\)" srcset="\/screenshots\/zpl-live-preview-dark\.png"/);
 const editorHtml = await readFile(path.join(outputDirectory, "editor.html"), "utf8");
 assert.match(editorHtml, /noindex, follow/);
 assert.match(editorHtml, /Opening the local ZPL editor/);
+assert.match(editorHtml, /<link(?=[^>]*rel="icon")(?=[^>]*href="\/favicon-96x96\.png")[^>]*>/);
 assert.equal(await fileExists(path.join(outputDirectory, "_worker.js")), false, "static output must not contain a Pages Worker");
 
 console.log(

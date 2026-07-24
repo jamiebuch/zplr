@@ -851,7 +851,6 @@ useHead({
       media: "(prefers-color-scheme: dark)",
     },
     { rel: "canonical", href: canonical },
-    { rel: "icon", type: "image/svg+xml", href: logoUrl },
   ],
   script: structuredData.map((entry) => ({
     type: "application/ld+json",

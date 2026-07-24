@@ -23,6 +23,12 @@ export default defineNuxtConfig({
         { name: "color-scheme", content: "light dark" },
         { name: "theme-color", content: "#18181b" },
       ],
+      link: [
+        { rel: "icon", type: "image/png", sizes: "96x96", href: "/favicon-96x96.png" },
+        { rel: "icon", type: "image/svg+xml", sizes: "any", href: "/favicon.svg" },
+        { rel: "shortcut icon", href: "/favicon.ico" },
+        { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
+      ],
     },
   },
   runtimeConfig: {

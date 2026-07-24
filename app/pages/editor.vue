@@ -8,8 +8,6 @@
 </template>
 
 <script setup lang="ts">
-import logoUrl from "../../web/assets/logo.svg";
-
 const config = useRuntimeConfig();
 const canonical = `${config.public.siteUrl}/editor`;
 
@@ -25,7 +23,6 @@ useSeoMeta({
 useHead({
   link: [
     { rel: "canonical", href: canonical },
-    { rel: "icon", type: "image/svg+xml", href: logoUrl },
   ],
 });
 </script>
