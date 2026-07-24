@@ -84,6 +84,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "build": "tsdown",
     "build:web": "node scripts/build-web.mjs",
+    "build:sites": "pnpm run build:web && node scripts/prepare-sites-build.mjs",
     "favicons:generate": "node scripts/generate-favicons.mjs",
     "generate:web": "nuxt generate",
     "preview:web": "node scripts/serve-static.mjs",
