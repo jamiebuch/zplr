@@ -9,7 +9,7 @@ const baselineDirectory = path.join(repositoryRoot, "public", "screenshots");
 const manifest = JSON.parse(await readFile(path.join(generatedDirectory, "manifest.json"), "utf8"));
 
 assert.equal(manifest.source, "captured", "only pipeline-captured screenshots can become baselines");
-assert.ok(Object.keys(manifest.files ?? {}).length === 8, "the complete light and dark screenshot set is required");
+assert.ok(Object.keys(manifest.files ?? {}).length === 10, "the complete light and dark screenshot set is required");
 await mkdir(baselineDirectory, { recursive: true });
 for (const filename of [...Object.keys(manifest.files), "manifest.json"]) {
   await cp(path.join(generatedDirectory, filename), path.join(baselineDirectory, filename));

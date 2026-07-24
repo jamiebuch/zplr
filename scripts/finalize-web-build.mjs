@@ -14,10 +14,12 @@ const canonicalOrigin = "https://zplr.de";
 const expectedScreenshots = {
   "zpl-editor-overview.png": [1440, 900],
   "zpl-editor-overview-dark.png": [1440, 900],
-  "zpl-visual-designer.png": [1440, 900],
-  "zpl-visual-designer-dark.png": [1440, 900],
-  "zpl-variable-data.png": [1440, 900],
-  "zpl-variable-data-dark.png": [1440, 900],
+  "zpl-live-preview.png": [1384, 1376],
+  "zpl-live-preview-dark.png": [1384, 1376],
+  "zpl-visual-designer.png": [1384, 1640],
+  "zpl-visual-designer-dark.png": [1384, 1640],
+  "zpl-variable-data.png": [2432, 720],
+  "zpl-variable-data-dark.png": [2432, 720],
   "zpl-editor-social.png": [1200, 630],
   "zpl-editor-social-dark.png": [1200, 630],
 };
@@ -127,6 +129,7 @@ assert.match(indexHtml, /rel="canonical" href="https:\/\/zplr\.de\/"/);
 assert.match(indexHtml, /application\/ld\+json/);
 assert.match(indexHtml, /Node\.js ZPL renderer/);
 assert.match(indexHtml, /media="\(prefers-color-scheme: dark\)" srcset="\/screenshots\/zpl-editor-overview-dark\.png"/);
+assert.match(indexHtml, /media="\(prefers-color-scheme: dark\)" srcset="\/screenshots\/zpl-live-preview-dark\.png"/);
 const editorHtml = await readFile(path.join(outputDirectory, "editor.html"), "utf8");
 assert.match(editorHtml, /noindex, follow/);
 assert.match(editorHtml, /Opening the local ZPL editor/);

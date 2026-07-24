@@ -50,6 +50,9 @@ test("renders locally and links to the dedicated editor route", async ({ page, r
   const landingResponse = await page.goto("/");
   expect(landingResponse?.headers()["content-security-policy"]).toMatch(/script-src 'self' 'sha256-/);
   await expect(page.getByRole("heading", { name: "Free Online ZPL Editor, Viewer & Visual Designer", exact: true })).toBeVisible();
+  const heroBottom = await page.locator(".landing-hero").evaluate((hero) => hero.getBoundingClientRect().bottom);
+  const viewportHeight = await page.evaluate(() => window.innerHeight);
+  expect(heroBottom).toBeLessThanOrEqual(viewportHeight + 1);
   await expect(page.getByTestId("local-only-notice")).toContainText("never leave this browser");
   await expect(page.getByAltText("ZPLr online ZPL editor showing ZPL code beside a rendered shipping label preview")).toBeVisible({ timeout: 30_000 });
   for (const alt of [
@@ -68,7 +71,7 @@ test("renders locally and links to the dedicated editor route", async ({ page, r
   await page.emulateMedia({ colorScheme: "dark" });
   for (const alt of [
     "ZPLr online ZPL editor showing ZPL code beside a rendered shipping label preview",
-    "Online ZPL viewer with source code, diagnostics, and a live label preview",
+    "Rendered shipping label in the live ZPL preview canvas",
     "Visual ZPL label designer with a drag-and-drop canvas, layers, guides, and field properties",
     "ZPL variable data manager previewing records imported from CSV or JSON for batch label export",
   ]) {

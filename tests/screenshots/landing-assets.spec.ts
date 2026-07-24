@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const outputDirectory = path.resolve(process.env.ZPLR_SCREENSHOT_DIR ?? ".screenshots/current");
 const runId = process.env.ZPLR_SCREENSHOT_RUN_ID;
@@ -94,8 +94,44 @@ async function capture(page: Page, filename: string): Promise<void> {
     animations: "disabled",
     caret: "hide",
     fullPage: false,
+    scale: "css",
     type: "png",
   });
+}
+
+async function captureElement(element: Locator, filename: string): Promise<void> {
+  await expect(element).toBeVisible();
+  await element.screenshot({
+    path: path.join(outputDirectory, filename),
+    animations: "disabled",
+    caret: "hide",
+    scale: "device",
+    type: "png",
+  });
+}
+
+async function captureElementTop(page: Page, element: Locator, filename: string, height: number): Promise<void> {
+  await expect(element).toBeVisible();
+  const bounds = await element.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.screenshot({
+    path: path.join(outputDirectory, filename),
+    animations: "disabled",
+    caret: "hide",
+    clip: {
+      x: bounds!.x,
+      y: bounds!.y,
+      width: bounds!.width,
+      height: Math.min(height, bounds!.height),
+    },
+    scale: "device",
+    type: "png",
+  });
+}
+
+function pngDimensions(bytes: Buffer): { width: number; height: number } {
+  expect(bytes.subarray(1, 4).toString("ascii")).toBe("PNG");
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
 test("captures current editor assets and records their provenance", async ({ page }) => {
@@ -106,6 +142,10 @@ test("captures current editor assets and records their provenance", async ({ pag
   for (const colorScheme of colorSchemes) {
     await openEditor(page, colorScheme);
     await capture(page, screenshotFilename("zpl-editor-overview", colorScheme));
+    await captureElement(
+      page.locator(".designer-viewport"),
+      screenshotFilename("zpl-live-preview", colorScheme),
+    );
 
     const layers = page.getByTestId("visual-layers");
     if (!await layers.isVisible()) {
@@ -115,7 +155,10 @@ test("captures current editor assets and records their provenance", async ({ pag
     await layers.locator("button").first().click();
     await page.getByRole("tab", { name: "Properties", exact: true }).click();
     await expect(page.getByRole("tabpanel", { name: "Properties", exact: true })).toBeVisible();
-    await capture(page, screenshotFilename("zpl-visual-designer", colorScheme));
+    await captureElement(
+      page.locator(".designer-root"),
+      screenshotFilename("zpl-visual-designer", colorScheme),
+    );
 
     await reloadEditor(page, colorScheme);
     await page.getByTitle("Variable data and batch preview").click();
@@ -131,26 +174,37 @@ test("captures current editor assets and records their provenance", async ({ pag
     await dataDialog.getByLabel("Field 1 for Record 2", { exact: true }).fill("Grace Hopper");
     await dataDialog.getByLabel("Order for Record 2", { exact: true }).fill("ZPL-1043");
     await expect(dataDialog.getByRole("button", { name: "Batch PNGs", exact: true })).toBeEnabled();
-    await capture(page, screenshotFilename("zpl-variable-data", colorScheme));
+    await captureElementTop(
+      page,
+      dataDialog,
+      screenshotFilename("zpl-variable-data", colorScheme),
+      360,
+    );
 
     await page.setViewportSize({ width: 1200, height: 630 });
     await reloadEditor(page, colorScheme);
     await capture(page, screenshotFilename("zpl-editor-social", colorScheme));
   }
 
-  const dimensions: Record<string, { width: number; height: number; colorScheme: ColorScheme }> = {};
+  const captures: Array<{ filename: string; colorScheme: ColorScheme }> = [];
   for (const colorScheme of colorSchemes) {
-    dimensions[screenshotFilename("zpl-editor-overview", colorScheme)] = { width: 1440, height: 900, colorScheme };
-    dimensions[screenshotFilename("zpl-visual-designer", colorScheme)] = { width: 1440, height: 900, colorScheme };
-    dimensions[screenshotFilename("zpl-variable-data", colorScheme)] = { width: 1440, height: 900, colorScheme };
-    dimensions[screenshotFilename("zpl-editor-social", colorScheme)] = { width: 1200, height: 630, colorScheme };
+    for (const name of [
+      "zpl-editor-overview",
+      "zpl-live-preview",
+      "zpl-visual-designer",
+      "zpl-variable-data",
+      "zpl-editor-social",
+    ]) {
+      captures.push({ filename: screenshotFilename(name, colorScheme), colorScheme });
+    }
   }
   const files: Record<string, { width: number; height: number; colorScheme: ColorScheme; sha256: string; bytes: number }> = {};
-  for (const [filename, size] of Object.entries(dimensions)) {
+  for (const { filename, colorScheme } of captures) {
     const bytes = await readFile(path.join(outputDirectory, filename));
     expect(bytes.byteLength).toBeGreaterThan(10_000);
     files[filename] = {
-      ...size,
+      ...pngDimensions(bytes),
+      colorScheme,
       sha256: createHash("sha256").update(bytes).digest("hex"),
       bytes: bytes.byteLength,
     };

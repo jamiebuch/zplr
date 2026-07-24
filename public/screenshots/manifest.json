@@ -1,65 +1,79 @@
 {
   "version": 1,
   "source": "captured",
-  "runId": "6a824fd4-6161-4385-b282-54d9c3bf28fb",
-  "commit": "ae37cf91b81e4891a0a5c24d6798e21870b28f6b",
-  "capturedAt": "2026-07-23T21:53:25.101Z",
+  "runId": "d5c7102f-e722-454d-a7cf-5cf6899b8a08",
+  "commit": "7c6a1c80635e7196e70906df6c2ff7b173cb7ce0",
+  "capturedAt": "2026-07-24T12:39:38.616Z",
   "files": {
     "zpl-editor-overview.png": {
       "width": 1440,
       "height": 900,
       "colorScheme": "light",
-      "sha256": "dc137e362e3ed7a487201f4ab2e5a80cee584a915e2878084d958e214ea4671b",
-      "bytes": 284366
+      "sha256": "c03a309004c0ff99f9d294e2ec04908888b6ba0a9d39afef24baf79abc0d4ac5",
+      "bytes": 284391
+    },
+    "zpl-live-preview.png": {
+      "width": 1384,
+      "height": 1376,
+      "colorScheme": "light",
+      "sha256": "7642042c30fbaa3bfa3607d6b10efd75704eb44c38de97715df873c2bfdfad9b",
+      "bytes": 292351
     },
     "zpl-visual-designer.png": {
-      "width": 1440,
-      "height": 900,
+      "width": 1384,
+      "height": 1640,
       "colorScheme": "light",
-      "sha256": "99e89c7831660abc2790eb52de689d513729966e33e9b5aade6bdcb2ae8c0adf",
-      "bytes": 334910
+      "sha256": "25b1893a44215f2cac23176ec98d9b4bcf34c146d19160c4763d1732b4630bc4",
+      "bytes": 409051
     },
     "zpl-variable-data.png": {
-      "width": 1440,
-      "height": 900,
+      "width": 2432,
+      "height": 720,
       "colorScheme": "light",
-      "sha256": "fad5c0842be09cd874e7940634b5549819eef2981a3989d8f2a666aa2047ff87",
-      "bytes": 139396
+      "sha256": "ae057ca9e171962c1a996acd6b0a4f2db500377b3ae20978a00e4733d3726ffd",
+      "bytes": 92995
     },
     "zpl-editor-social.png": {
       "width": 1200,
       "height": 630,
       "colorScheme": "light",
-      "sha256": "f722d006858bee6c5ab0970e5db2f078eee466bc228f7727487e867709155225",
-      "bytes": 162908
+      "sha256": "e45ece3e12bc7ea0cd77689bf192733f497456095c5013d72d1a2413c1daa9ac",
+      "bytes": 162897
     },
     "zpl-editor-overview-dark.png": {
       "width": 1440,
       "height": 900,
       "colorScheme": "dark",
-      "sha256": "4fc2303c3d7e3387c097819ae4601df21cf6d19d58bf6623e0d2aa6c80e83ffc",
-      "bytes": 274891
+      "sha256": "3e3c49ef4c3b0017ec2993bb2a9dad52c43577cb0c01cd5dce31b2cafb418ea0",
+      "bytes": 274929
+    },
+    "zpl-live-preview-dark.png": {
+      "width": 1384,
+      "height": 1376,
+      "colorScheme": "dark",
+      "sha256": "349a9a84860a88c21c1ee304e3d57c29ffacf722fa9f2f7d518da8f060b33644",
+      "bytes": 271362
     },
     "zpl-visual-designer-dark.png": {
-      "width": 1440,
-      "height": 900,
+      "width": 1384,
+      "height": 1640,
       "colorScheme": "dark",
-      "sha256": "4859c47404feda857c41c07846cdcd5d73c8364aae386f5e585727562dd23b92",
-      "bytes": 328258
+      "sha256": "8e4fcd5a38ac23413068685a829bb632863b5bbc4e31eb0822a29f73bfff9f17",
+      "bytes": 394694
     },
     "zpl-variable-data-dark.png": {
-      "width": 1440,
-      "height": 900,
+      "width": 2432,
+      "height": 720,
       "colorScheme": "dark",
-      "sha256": "170ff66d8c75671944682086b6d5023e69937cd824d6dfe0d6c68c6caee82601",
-      "bytes": 131023
+      "sha256": "63c73813d2ef46c15008eda5eed3220eade47dfbefc081c1582006b5861cbc73",
+      "bytes": 94861
     },
     "zpl-editor-social-dark.png": {
       "width": 1200,
       "height": 630,
       "colorScheme": "dark",
-      "sha256": "b30c1abe46d2f05c653ed024c767f70599d7b7b7757492e79df43ea14e7cdd44",
-      "bytes": 157105
+      "sha256": "af3261e553d6095124c5e30b9e45d67bbd163eef38cd20cc8c7eb335f6d4a283",
+      "bytes": 157078
     }
   }
 }
