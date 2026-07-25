@@ -437,8 +437,8 @@ test("combines Code and WYSIWYG editing with visual source edits", async ({ page
   await expect(layerNames.first()).toHaveText("Visual label");
 
   await layers.getByRole("button", { name: /Select Visual label layer/ }).click();
-  await page.keyboard.press("Meta+C");
-  await page.keyboard.press("Meta+V");
+  await page.keyboard.press("ControlOrMeta+C");
+  await page.keyboard.press("ControlOrMeta+V");
   await expect(canvas.locator('[data-visual-kind="text"]')).toHaveCount(2);
   await page.keyboard.press("Backspace");
   await expect(canvas.locator('[data-visual-kind="text"]')).toHaveCount(1);
