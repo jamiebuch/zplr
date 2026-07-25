@@ -1,5 +1,5 @@
 <template>
-  <div ref="root" class="mini-preview" :aria-busy="state === 'loading'">
+  <div ref="root" class="mini-preview" :class="{ compact }" :aria-busy="state === 'loading'">
     <div v-if="state === 'idle' || state === 'loading'" class="mini-preview-state" role="status">
       <span class="preview-spinner" aria-hidden="true"></span>
       {{ state === "idle" ? "Preview queued" : "Rendering locally…" }}
@@ -32,6 +32,7 @@ import { IconAlertCircleOutline } from "@iconify-prerendered/vue-mdi";
 const props = defineProps<{
   source: string;
   alt: string;
+  compact?: boolean;
 }>();
 
 interface PreviewResult {
@@ -166,6 +167,15 @@ onBeforeUnmount(() => observer?.disconnect());
   object-fit: contain;
   padding: 1.25rem;
   image-rendering: pixelated;
+}
+
+.mini-preview.compact {
+  min-height: 14rem;
+}
+
+.mini-preview.compact .mini-preview-image {
+  max-height: 18rem;
+  padding: 1rem;
 }
 
 .mini-preview-state {

@@ -108,53 +108,75 @@
                 </div>
 
                 <div class="examples-heading">
-                  <h3>Examples for <code>{{ parameter.key }}</code></h3>
-                  <p>Other parameters remain at representative defaults.</p>
+                  <h3><code>{{ parameter.key }}</code> variations</h3>
+                  <p>Compare values side by side; other parameters remain at representative defaults.</p>
                 </div>
-                <div class="space-y-5">
-                  <section v-for="example in parameter.examples" :key="example.id" class="example-card">
-                    <div class="example-card-header">
-                      <div>
-                        <h4>{{ example.title }}</h4>
-                        <p>{{ example.description }}</p>
+                <section
+                  class="example-comparison"
+                  :aria-label="`${parameter.key} parameter variations`"
+                >
+                  <div class="comparison-label">
+                    <span>Side-by-side comparison</span>
+                    <span>{{ parameter.examples.length }} variations</span>
+                  </div>
+                  <div
+                    class="comparison-grid"
+                    :class="comparisonClass(parameter.examples.length)"
+                    role="list"
+                  >
+                    <article
+                      v-for="example in parameter.examples"
+                      :key="example.id"
+                      class="example-card example-variation"
+                      role="listitem"
+                    >
+                      <div class="example-card-header">
+                        <div>
+                          <h4>{{ example.title }}</h4>
+                          <p>{{ example.description }}</p>
+                        </div>
+                        <div class="example-actions">
+                          <button type="button" :aria-label="`Copy ${example.title}`" @click="copyExample(example)">
+                            <IconCheck v-if="copiedExample === example.id" class="size-4" aria-hidden="true" />
+                            <IconContentCopy v-else class="size-4" aria-hidden="true" />
+                            {{ copiedExample === example.id ? "Copied" : "Copy" }}
+                          </button>
+                          <NuxtLink :to="{ path: '/editor', query: { example: example.id } }">
+                            <IconPencilOutline class="size-4" aria-hidden="true" />
+                            Edit in editor
+                            <IconArrowRight class="size-3.5" aria-hidden="true" />
+                          </NuxtLink>
+                        </div>
                       </div>
-                      <div class="example-actions">
-                        <button type="button" :aria-label="`Copy ${example.title}`" @click="copyExample(example)">
-                          <IconCheck v-if="copiedExample === example.id" class="size-4" aria-hidden="true" />
-                          <IconContentCopy v-else class="size-4" aria-hidden="true" />
-                          {{ copiedExample === example.id ? "Copied" : "Copy" }}
-                        </button>
-                        <NuxtLink :to="{ path: '/editor', query: { example: example.id } }">
-                          <IconPencilOutline class="size-4" aria-hidden="true" />
-                          Edit in editor
-                          <IconArrowRight class="size-3.5" aria-hidden="true" />
-                        </NuxtLink>
-                      </div>
-                    </div>
 
-                    <div class="example-body" :class="{ 'code-only': !example.preview }">
-                      <div class="code-pane">
-                        <div class="pane-label">
-                          <span>ZPL</span>
-                          <span>{{ example.filename }}</span>
+                      <div class="example-body" :class="{ 'code-only': !example.preview }">
+                        <div class="code-pane">
+                          <div class="pane-label">
+                            <span>ZPL</span>
+                            <span>{{ example.filename }}</span>
+                          </div>
+                          <pre tabindex="0"><code>{{ example.source }}</code></pre>
                         </div>
-                        <pre tabindex="0"><code>{{ example.source }}</code></pre>
-                      </div>
-                      <div v-if="example.preview" class="preview-pane">
-                        <div class="pane-label">
-                          <span>Renderer</span>
-                          <span>8 dpmm</span>
+                        <div v-if="example.preview" class="preview-pane">
+                          <div class="pane-label">
+                            <span>Renderer</span>
+                            <span>8 dpmm</span>
+                          </div>
+                          <ClientOnly>
+                            <ZplMiniPreview
+                              :source="example.source"
+                              :alt="`Rendered label for ${guide.canonical} ${example.title}`"
+                              compact
+                            />
+                            <template #fallback>
+                              <div class="preview-fallback" role="status">Preview loads in your browser</div>
+                            </template>
+                          </ClientOnly>
                         </div>
-                        <ClientOnly>
-                          <ZplMiniPreview :source="example.source" :alt="`Rendered label for ${guide.canonical} ${example.title}`" />
-                          <template #fallback>
-                            <div class="preview-fallback" role="status">Preview loads in your browser</div>
-                          </template>
-                        </ClientOnly>
                       </div>
-                    </div>
-                  </section>
-                </div>
+                    </article>
+                  </div>
+                </section>
               </article>
             </template>
 
@@ -321,6 +343,10 @@ let copyTimer: ReturnType<typeof setTimeout> | undefined;
 function cleanName(value: string): string {
   const normalized = value.replace(/\s+/g, " ").replace(/\s*[-–—:,.]+\s*$/g, "").trim();
   return normalized ? normalized[0]!.toUpperCase() + normalized.slice(1) : "Parameter";
+}
+
+function comparisonClass(exampleCount: number): string {
+  return `variations-${Math.min(3, Math.max(1, exampleCount))}`;
 }
 
 function titleCase(value: string): string {
@@ -629,6 +655,93 @@ useHead({
   font-size: 0.68rem;
 }
 
+.example-comparison {
+  overflow: hidden;
+  border: 1px solid rgb(212 212 216);
+  border-radius: 0.9rem;
+  background: rgb(212 212 216);
+  box-shadow: 0 4px 16px rgb(24 24 27 / 0.035);
+}
+
+.comparison-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid rgb(228 228 231);
+  background: rgb(250 250 250);
+  padding: 0.55rem 0.8rem;
+  color: rgb(113 113 122);
+  font-size: 0.59rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.comparison-grid {
+  display: grid;
+  gap: 1px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
+}
+
+.comparison-grid.variations-1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.comparison-grid.variations-2 {
+  grid-template-columns: repeat(2, minmax(18rem, 1fr));
+}
+
+.comparison-grid.variations-3 {
+  grid-template-columns: repeat(3, minmax(18rem, 1fr));
+}
+
+.example-variation {
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.example-comparison .example-card {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.example-variation .example-card-header {
+  min-height: 8.25rem;
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.example-variation .example-actions {
+  width: 100%;
+}
+
+.example-variation .example-actions a {
+  margin-left: auto;
+}
+
+.example-variation .example-body,
+.example-variation .example-body.code-only {
+  grid-template-columns: 1fr;
+}
+
+.example-variation .preview-pane {
+  border-top: 1px solid rgb(228 228 231);
+  border-left: 0;
+}
+
+.example-variation .code-pane pre {
+  min-height: 14rem;
+  max-height: 20rem;
+}
+
+.example-variation .preview-fallback {
+  min-height: 14rem;
+}
+
 .example-card {
   overflow: hidden;
   border: 1px solid rgb(212 212 216);
@@ -916,6 +1029,17 @@ useHead({
 }
 
 @media (max-width: 767px) {
+  .comparison-grid.variations-2,
+  .comparison-grid.variations-3 {
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+    scroll-snap-type: none;
+  }
+
+  .example-variation .example-card-header {
+    min-height: 0;
+  }
+
   .example-card-header,
   .official-reference {
     align-items: stretch;
@@ -951,9 +1075,15 @@ useHead({
 
 @media (prefers-color-scheme: dark) {
   .hero-command,
-  .example-card {
+  .example-card,
+  .comparison-label {
     border-color: rgb(255 255 255 / 0.1);
     background: rgb(24 24 27);
+  }
+
+  .example-comparison {
+    border-color: rgb(255 255 255 / 0.1);
+    background: rgb(255 255 255 / 0.1);
   }
 
   .fact-badge,
@@ -963,6 +1093,7 @@ useHead({
   .adjacent-navigation,
   .toc,
   .toc > .all-commands,
+  .comparison-label,
   .example-card-header,
   .preview-pane,
   .preview-pane .pane-label {

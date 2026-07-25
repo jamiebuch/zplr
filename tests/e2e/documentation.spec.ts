@@ -43,7 +43,21 @@ test("renders visual examples lazily and keeps device commands code-only", async
   await page.goto("/zpl-commands/caret-fo");
   await expect(page.getByRole("heading", { name: "Field Origin" })).toBeVisible();
   await expect(page.getByText("^FOx,y,z", { exact: true })).toBeVisible();
-  await page.locator(".example-card").first().scrollIntoViewIfNeeded();
+  const firstComparison = page.locator(".example-comparison").first();
+  await firstComparison.scrollIntoViewIfNeeded();
+  await expect(firstComparison.getByText("Side-by-side comparison", { exact: true })).toBeVisible();
+  const variations = firstComparison.locator(".example-variation");
+  await expect(variations).toHaveCount(2);
+  await expect(firstComparison.getByText("Renderer", { exact: true })).toHaveCount(2);
+  const variationLayout = await variations.evaluateAll(([first, second]) => {
+    const firstBounds = first!.getBoundingClientRect();
+    const secondBounds = second!.getBoundingClientRect();
+    return {
+      sameRow: Math.abs(firstBounds.top - secondBounds.top) < 2,
+      separated: secondBounds.left >= firstBounds.right - 2,
+    };
+  });
+  expect(variationLayout).toEqual({ sameRow: true, separated: true });
   const firstPreview = page.getByAltText(/Rendered label for \^FO/).first();
   await expect(firstPreview).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("link", { name: /Edit in editor/ }).first()).toHaveAttribute(
