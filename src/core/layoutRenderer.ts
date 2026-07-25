@@ -320,3 +320,73 @@ export function encodeCode128Raster(
     display: encoded.display,
   };
 }
+
+/**
+ * Encodes the linear half of ^BR types 11 and 12 when no composite payload is
+ * supplied. Zebra starts numeric GS1-128 data in subset C and switches an odd
+ * trailing character to subset A, rather than BWIPP's subset-B choice.
+ */
+export function encodeGs1Code128Raster(data: string): {
+  bits: string;
+  display: string;
+} {
+  if (data.length === 0) throw new Error("GS1-128 field data is empty.");
+  const initialDigits = digitRunLength(data, 0);
+  let set: Code128Set =
+    initialDigits >= 4
+      ? "C"
+      : data.charCodeAt(0) <= 95
+      ? "A"
+      : "B";
+  const start = set === "A" ? 103 : set === "B" ? 104 : 105;
+  const values = [102];
+  let index = 0;
+
+  while (index < data.length) {
+    const digits = digitRunLength(data, index);
+    if (set === "C") {
+      if (digits >= 2) {
+        values.push(Number(data.slice(index, index + 2)));
+        index += 2;
+        continue;
+      }
+      const nextSet = data.charCodeAt(index) <= 95 ? "A" : "B";
+      values.push(nextSet === "A" ? 101 : 100);
+      set = nextSet;
+      continue;
+    }
+    if (digits >= 4) {
+      if (digits % 2 === 1) {
+        values.push(code128Value(data[index], set));
+        index++;
+      }
+      values.push(99);
+      set = "C";
+      continue;
+    }
+    const character = data[index];
+    const codePoint = character.charCodeAt(0);
+    if ((set === "A" && codePoint > 95) || (set === "B" && codePoint < 32)) {
+      const nextSet = set === "A" ? "B" : "A";
+      values.push(nextSet === "A" ? 101 : 100);
+      set = nextSet;
+      continue;
+    }
+    values.push(code128Value(character, set));
+    index++;
+  }
+
+  const checksum =
+    (start +
+      values.reduce(
+        (sum, value, valueIndex) => sum + value * (valueIndex + 1),
+        0
+      )) %
+    103;
+  return {
+    bits: [start, ...values, checksum, 106]
+      .map((value) => CODE128_ENCODINGS[value]?.toString() ?? "")
+      .join(""),
+    display: data,
+  };
+}

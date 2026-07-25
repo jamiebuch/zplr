@@ -1227,7 +1227,7 @@ export function interpretLabel(
         kind: "text",
         data: field.data,
         x: field.x,
-        y: field.typeset ? field.y - font.height : field.y,
+        y: field.typeset ? Math.max(0, field.y - font.height) : field.y,
         orientation: font.orientation,
         reverse,
         commandIndex,
@@ -1653,13 +1653,19 @@ export function interpretLabel(
         break;
       case "GB": {
         const thickness = dotValue(args[2], 1, 1, 32000);
+        const requestedRounding = zplNumber(trimmed(args[4]));
         field.graphic = {
           kind: "box",
           width: dotValue(args[0], thickness, 0, 32000) || thickness,
           height: dotValue(args[1], thickness, 0, 32000) || thickness,
           thickness,
           color: trimmed(args[3]) === "W" ? "W" : "B",
-          rounding: numberValue(args[4], 0, 0, 8, true),
+          rounding:
+            requestedRounding !== undefined &&
+            requestedRounding >= 0 &&
+            requestedRounding <= 8
+              ? Math.trunc(requestedRounding)
+              : 0,
           commandIndex: node.index,
         };
         field.barcode = undefined;
@@ -2005,12 +2011,12 @@ export function interpretLabel(
         )
           ? requestedStartingMode
           : "A";
-        const rowHeight = dotValue(
-          args[1],
-          labelState.barcodeDefaults.height,
-          1,
-          32000
-        );
+        const requestedRowHeight = zplNumber(trimmed(args[1]));
+        const explicitRowHeight =
+          requestedRowHeight !== undefined && requestedRowHeight > 0;
+        const rowHeight = explicitRowHeight
+          ? dotValue(args[1], 1, 1, 32000)
+          : 1;
         field.barcode = {
           symbology: "B4",
           encoder: "code49",
@@ -2019,6 +2025,9 @@ export function interpretLabel(
           orientation: orientationValue(args[0], labelState.defaultOrientation),
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           height: labelState.barcodeDefaults.moduleWidth,
+          overallHeight: explicitRowHeight
+            ? undefined
+            : labelState.barcodeDefaults.height,
           printInterpretationBelow: interpretation === "B",
           printInterpretationAbove: interpretation === "A",
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
@@ -2484,7 +2493,10 @@ export function interpretLabel(
           encoder,
           matrix,
           commandIndex: node.index,
-          orientation: orientationValue(args[0], "R"),
+          orientation: orientationValue(
+            args[0],
+            labelState.defaultOrientation
+          ),
           moduleWidth: numberValue(
             args[2],
             dpi === 600 ? 6 : dpi === 300 ? 3 : 2,

@@ -196,7 +196,7 @@ export interface ExtendedBarcodeLayoutField extends BaseBarcodeLayoutField {
   readonly matrix: boolean;
   /** Wide-to-narrow ratio inherited from ^BY for variable-ratio linear symbols. */
   readonly ratio?: number;
-  /** ^B7 overall height inherited from ^BY when no row height is supplied. */
+  /** Overall height inherited from ^BY when a matrix row height is omitted. */
   readonly overallHeight?: number;
   readonly encoderOptions: Readonly<Record<string, string | number | boolean>>;
 }

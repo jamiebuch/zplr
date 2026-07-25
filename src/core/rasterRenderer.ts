@@ -36,13 +36,14 @@ import {
   code39CheckDigit,
   code39Runs,
   encodeCode128Raster,
+  encodeGs1Code128Raster,
 } from "./layoutRenderer";
 import {
   encodeLegacyDataMatrix,
   type LegacyDataMatrixQuality,
 } from "./legacyDataMatrix";
 import { encodeLegacyQrModel1 } from "./legacyQrModel1";
-import { encodeQrModel2 } from "./qrModel2";
+import { encodeQrModel2, encodeQrModel2WithMask } from "./qrModel2";
 import { encodeZplCode49, expandAutomaticCode49 } from "./code49";
 import { encodeZplCodablockA } from "./codablockA";
 import {
@@ -579,21 +580,42 @@ export function layoutTextLines(field: TextLayoutField): RasterTextLine[] {
       },
     ];
   }
-  if (field.block.width <= 0) return [];
-  const lines: RasterTextLine[] = [];
   const normalized =
     field.block.mode === "TB"
       ? parseTextBlockEscapes(field.data)
       : parseBlockEscapes(field.data.slice(0, MAX_FIELD_BLOCK_DATA));
+  const naturalWidth = Math.max(
+    field.font.width,
+    ...normalized
+      .split(/\r?\n/)
+      .map((paragraph) => measureFieldText(paragraph, field))
+  );
+  const blockWidth =
+    field.block.width > 0
+      ? Math.max(field.font.width, field.block.width)
+      : field.block.mode === "FB" && field.block.hangingIndent > 0
+      ? naturalWidth
+      : field.font.width;
+  const layoutField =
+    blockWidth === field.block.width
+      ? field
+      : {
+          ...field,
+          block: {
+            ...field.block,
+            width: blockWidth,
+          },
+        };
+  const lines: RasterTextLine[] = [];
   for (const paragraph of normalized.split(/\r?\n/)) {
-    lines.push(...wrapParagraph(paragraph, field, lines.length));
+    lines.push(...wrapParagraph(paragraph, layoutField, lines.length));
   }
   const lineStep = Math.max(1, field.font.height + field.block.lineSpacing);
   const heightLines =
     field.block.height === undefined
       ? field.block.maxLines
       : Math.max(
-          0,
+          1,
           Math.floor((field.block.height - field.font.height) / lineStep) + 1
         );
   const maximumLines = Math.min(field.block.maxLines, heightLines);
@@ -607,6 +629,16 @@ export function layoutTextLines(field: TextLayoutField): RasterTextLine[] {
     overprints: overflow.slice(1),
   };
   return retained;
+}
+
+function firstDarkRow(raster: MonochromeRaster): number {
+  for (let y = 0; y < raster.height; y++) {
+    const start = y * raster.stride;
+    for (let x = 0; x < raster.stride; x++) {
+      if (raster.data[start + x] !== 0) return y;
+    }
+  }
+  return 0;
 }
 
 async function glyphFor(
@@ -878,7 +910,11 @@ async function renderTextField(
     const gap = Math.max(0, field.characterGap ?? 0);
     const blockWidth = field.block?.width;
     const blockHeight = field.block?.height;
-    const logicalWidth = Math.max(1, blockWidth ?? field.font.width);
+    const logicalWidth = Math.max(
+      1,
+      field.font.width,
+      blockWidth ?? field.font.width
+    );
     const logicalHeight = Math.max(
       1,
       blockHeight ??
@@ -1013,9 +1049,18 @@ async function renderTextField(
   const lineStep = Math.max(1, field.font.height + (field.block?.lineSpacing ?? 0));
   const logicalWidth = Math.max(
     1,
-    field.block?.width ?? Math.max(0, ...lines.map((line) => line.width))
+    field.font.width,
+    field.block?.width ?? 0,
+    ...lines.map((line) => line.indent + line.width)
   );
-  const logicalHeight = Math.max(1, field.font.height + Math.max(0, lines.length - 1) * lineStep);
+  const naturalLogicalHeight =
+    field.font.height + Math.max(0, lines.length - 1) * lineStep;
+  const logicalHeight = Math.max(
+    1,
+    field.block?.mode === "TB" && field.block.height !== undefined
+      ? Math.min(field.block.height, naturalLogicalHeight)
+      : naturalLogicalHeight
+  );
   const textRaster = allocate(logicalWidth, logicalHeight);
   const logicalCaretStops: TextCaretStop[] = [];
   const op = operation(field.reverse);
@@ -1076,11 +1121,13 @@ async function renderTextField(
         fontLinks
       );
       substituted ||= resolved.substituted;
+      const glyphTop =
+        field.block?.mode === "TB" ? firstDarkRow(resolved.raster) : 0;
       blitRaster(
         textRaster,
         resolved.raster,
         Math.round(cursor),
-        lineIndex * lineStep,
+        lineIndex * lineStep - glyphTop,
         { operation: "set" }
       );
       const nextCursor = cursor +
@@ -1119,7 +1166,19 @@ async function renderTextField(
       [...field.data].map(bidiClass).find((value) => value !== "N") === "R");
   const originRight = field.originJustification === "R" || autoRight;
   const rightAnchored = field.direction === "R" ? !originRight : originRight;
-  const x = rightAnchored ? field.x - oriented.width : field.x;
+  const finalCharacter = singleLine
+    ? [...singleLine.text].at(-1) ?? ""
+    : "";
+  const typesetRightBearing =
+    rightAnchored &&
+    field.typeset === true &&
+    field.orientation === "N" &&
+    finalCharacter !== ""
+      ? measureFieldText(finalCharacter, field)
+      : 0;
+  const x = rightAnchored
+    ? field.x - oriented.width + typesetRightBearing
+    : field.x;
   const size = blitRaster(target, textRaster, x, field.y, {
     orientation: field.orientation,
     operation: op,
@@ -1389,10 +1448,13 @@ function barcodeOptions(field: BarcodeLayoutField): {
   }
   if (field.symbology === "BC") {
     if (field.mode === "U") {
-      if (!/^\d+$/.test(field.data)) {
+      const numeric = /^\d+$/.test(field.data);
+      if (!numeric && field.validation) {
         throw new Error("Code 128 UCC Case Mode accepts numeric field data only.");
       }
-      const nineteenDigits = field.data.slice(0, 19).padEnd(19, "0");
+      const nineteenDigits = numeric
+        ? field.data.slice(0, 19).padEnd(19, "0")
+        : field.data.replace(/\D/g, "").slice(-19).padStart(19, "0");
       const normalized = nineteenDigits + mod10CheckDigit(nineteenDigits);
       return {
         bcid: "code128",
@@ -1450,7 +1512,18 @@ function barcodeOptions(field: BarcodeLayoutField): {
   let display = field.data;
   const options = { ...field.encoderOptions };
 
-  if (field.symbology === "BX") {
+  if (
+    (field.symbology === "B0" || field.symbology === "BO") &&
+    field.encoder === "aztecrune"
+  ) {
+    if (!/^\d{1,3}$/.test(encodedText) || Number(encodedText) > 255) {
+      if (field.validation) {
+        throw new Error("Aztec Rune field data must be an integer from 0 to 255.");
+      }
+      encodedText = "0";
+    }
+    display = "";
+  } else if (field.symbology === "BX") {
     const quality = Number(field.encoderOptions.zplQuality ?? 0);
     if (quality === 200) {
       // Zebra truncates quality-200 input at 3072 supplied bytes.  ZPL field
@@ -1514,7 +1587,10 @@ function barcodeOptions(field: BarcodeLayoutField): {
     const mode = Number(field.encoderOptions.zplMode ?? 2);
     if (mode === 2) {
       if (!/^\d{15}/.test(encodedText)) {
-        throw new Error("MaxiCode mode 2 requires a 15-digit high-priority message.");
+        if (field.validation) {
+          throw new Error("MaxiCode mode 2 requires a 15-digit high-priority message.");
+        }
+        encodedText = `000000000000000${encodedText}`;
       }
       const service = encodedText.slice(0, 3);
       const country = encodedText.slice(3, 6);
@@ -1522,7 +1598,10 @@ function barcodeOptions(field: BarcodeLayoutField): {
       encodedText = `${postal}\x1d${country}\x1d${service}\x1d${encodedText.slice(15)}`;
     } else if (mode === 3) {
       if (!/^[0-9]{6}[0-9A-Z ]{6}/.test(encodedText)) {
-        throw new Error("MaxiCode mode 3 requires a 12-character high-priority message.");
+        if (field.validation) {
+          throw new Error("MaxiCode mode 3 requires a 12-character high-priority message.");
+        }
+        encodedText = `000000      ${encodedText}`;
       }
       const service = encodedText.slice(0, 3);
       const country = encodedText.slice(3, 6);
@@ -1999,6 +2078,79 @@ function linearRaster(
   return raster;
 }
 
+const POSTNET_PATTERNS = [
+  "11000",
+  "00011",
+  "00101",
+  "00110",
+  "01001",
+  "01010",
+  "01100",
+  "10001",
+  "10010",
+  "10100",
+] as const;
+
+const PLANET_PATTERNS = [
+  "00111",
+  "11100",
+  "11010",
+  "11001",
+  "10110",
+  "10101",
+  "10011",
+  "01110",
+  "01101",
+  "01011",
+] as const;
+
+function renderPostalBarcode(
+  field: ExtendedBarcodeLayoutField,
+  planet: boolean,
+  allocate: RasterAllocator
+): MonochromeRaster {
+  let digits = field.data.replace(/\D/g, "");
+  if (digits !== field.data && field.validation) {
+    throw new Error("Postal barcode field data accepts numeric characters only.");
+  }
+  if (digits.length === 0) {
+    throw new Error("Postal barcode field data must contain at least one digit.");
+  }
+  const checkDigit =
+    (10 - [...digits].reduce((sum, digit) => sum + Number(digit), 0) % 10) %
+    10;
+  digits += String(checkDigit);
+  const patterns = planet ? PLANET_PATTERNS : POSTNET_PATTERNS;
+  const tallBars = [
+    true,
+    ...[...digits].flatMap((digit) =>
+      [...patterns[Number(digit)]].map((value) => value === "1")
+    ),
+    true,
+  ];
+  const barWidth = Math.max(1, field.moduleWidth);
+  const gap = Math.max(1, Math.round(field.moduleWidth * 1.5));
+  const height = Math.max(1, field.height);
+  const shortHeight = Math.floor(height * 0.4);
+  const raster = allocate(
+    tallBars.length * barWidth + Math.max(0, tallBars.length - 1) * gap,
+    height
+  );
+  tallBars.forEach((tall, index) => {
+    const barHeight = tall ? height : shortHeight;
+    if (barHeight > 0) {
+      fillRect(
+        raster,
+        index * (barWidth + gap),
+        height - barHeight,
+        barWidth,
+        barHeight
+      );
+    }
+  });
+  return raster;
+}
+
 function renderTlc39(
   field: ExtendedBarcodeLayoutField,
   allocate: RasterAllocator
@@ -2297,7 +2449,7 @@ function renderCodablockA(
   });
   const moduleWidth = field.moduleWidth;
   const rowHeight = Math.max(
-    2,
+    moduleWidth * 2,
     Math.trunc(Number(field.encoderOptions.rowheight ?? 8))
   );
   const separatorHeight = moduleWidth;
@@ -2365,6 +2517,13 @@ function renderCodablockEF(
         value !== 0
     )
   );
+  encoderOptions.rowheight = Math.max(
+    8,
+    Math.min(
+      50,
+      Math.trunc(Number(field.encoderOptions.rowheight ?? 8))
+    )
+  );
   const raw = bwipjs.raw({
     bcid: config.bcid,
     text: config.text,
@@ -2379,7 +2538,7 @@ function renderCodablockEF(
   }
   const moduleWidth = field.moduleWidth;
   const rowHeight = Math.max(
-    2,
+    moduleWidth * 2,
     Math.trunc(Number(field.encoderOptions.rowheight ?? 8))
   );
   const separatorHeight = moduleWidth;
@@ -2555,14 +2714,31 @@ function renderGs1DataBar(
   const separator = field.data.indexOf("|");
   const linearSource = separator < 0 ? field.data : field.data.slice(0, separator);
   const compositeSource = separator < 0 ? undefined : field.data.slice(separator + 1);
-  if (type >= 11 && compositeSource === undefined) {
-    throw new Error(`GS1 DataBar type ${type} requires a composite component after '|'.`);
-  }
   if (type === 8 && compositeSource === undefined) {
     return {
       raster: renderZplBrUpce(linearSource, field.moduleWidth, allocate),
       display: "",
     };
+  }
+  if (type >= 11 && compositeSource === undefined) {
+    const encoded = encodeGs1Code128Raster(linearSource);
+    const quietZone = 10 * field.moduleWidth;
+    const raster = allocate(
+      quietZone + encoded.bits.length * field.moduleWidth + quietZone,
+      Math.max(1, field.height)
+    );
+    for (let index = 0; index < encoded.bits.length; index++) {
+      if (encoded.bits[index] === "1") {
+        fillRect(
+          raster,
+          quietZone + index * field.moduleWidth,
+          0,
+          field.moduleWidth,
+          raster.height
+        );
+      }
+    }
+    return { raster, display: "" };
   }
   const linear = normalizeZplDataBarLinear(type, linearSource);
   const segments = Math.max(
@@ -2712,14 +2888,40 @@ function rawBarcodeRaster(
     });
     return { raster, display: `*${encoded}*` };
   }
+  if (field.symbology === "B5") {
+    return {
+      raster: renderPostalBarcode(field, true, allocate),
+      display: "",
+    };
+  }
+  if (
+    field.symbology === "BZ" &&
+    [0, 1].includes(Number(field.encoderOptions.zplPostalType ?? 0))
+  ) {
+    return {
+      raster: renderPostalBarcode(
+        field,
+        Number(field.encoderOptions.zplPostalType ?? 0) === 1,
+        allocate
+      ),
+      display: "",
+    };
+  }
   if (
     field.symbology === "BC" &&
     (field.mode === "N" || field.mode === "A")
   ) {
+    let uccCheckDigit = field.uccCheckDigit;
+    if (uccCheckDigit && !/^\d+$/.test(field.data)) {
+      if (field.validation) {
+        throw new Error("A Code 128 UCC check digit requires numeric field data.");
+      }
+      uccCheckDigit = false;
+    }
     const encoded = encodeCode128Raster(
       field.data,
       field.mode,
-      field.uccCheckDigit
+      uccCheckDigit
     );
     const raster = allocate(
       encoded.bits.length * field.moduleWidth,
@@ -2742,7 +2944,7 @@ function rawBarcodeRaster(
     const startingMode = String(
       field.encoderOptions.zplStartingMode ?? "A"
     ).toUpperCase();
-    const rowHeight = Math.max(
+    let rowHeight = Math.max(
       1,
       Math.trunc(Number(field.encoderOptions.rowheight ?? 8))
     );
@@ -2753,21 +2955,51 @@ function rawBarcodeRaster(
       const raw = bwipjs.raw({
         bcid: "code49",
         text: field.data,
-        rowheight: rowHeight,
+        // BWIPP validates a physical row-height range even though Zebra
+        // accepts one-dot rows. Its compact matrix is independent of
+        // this value, so expand it below using the ZPL row height.
+        rowheight: Math.max(8, Math.min(50, rowHeight)),
         sepheight: 1,
       })[0] as unknown as RawMatrixBarcode | undefined;
       if (!raw || !("pixs" in raw) || !("pixx" in raw)) {
         throw new Error("The Code 49 encoder produced no symbol.");
       }
+      const compactRows = raw.pixs.length / raw.pixx;
+      const dataRows = (compactRows - 1) / 2;
+      if (field.overallHeight !== undefined && dataRows > 0) {
+        const targetModules = Math.max(
+          1,
+          Math.floor(field.overallHeight / field.moduleWidth)
+        );
+        rowHeight = Math.max(
+          1,
+          Math.floor((targetModules - dataRows - 1) / dataRows)
+        );
+      }
       modules = expandAutomaticCode49(raw.pixs, raw.pixx, rowHeight);
       width = raw.pixx;
       display = field.data;
     } else {
-      const symbol = encodeZplCode49(
+      let symbol = encodeZplCode49(
         field.data,
         Number(startingMode) as 0 | 1 | 2 | 3 | 4 | 5,
         rowHeight
       );
+      if (field.overallHeight !== undefined) {
+        const targetModules = Math.max(
+          1,
+          Math.floor(field.overallHeight / field.moduleWidth)
+        );
+        rowHeight = Math.max(
+          1,
+          Math.floor((targetModules - symbol.rows - 1) / symbol.rows)
+        );
+        symbol = encodeZplCode49(
+          field.data,
+          Number(startingMode) as 0 | 1 | 2 | 3 | 4 | 5,
+          rowHeight
+        );
+      }
       modules = symbol.modules;
       width = symbol.width;
       display = symbol.display;
@@ -2803,8 +3035,21 @@ function rawBarcodeRaster(
     return renderAztec(field, allocate);
   }
   if (field.symbology === "BQ") {
+    const oversizedMagnification = field.magnification > 10;
     const symbol =
-      field.model === "1" ? encodeLegacyQrModel1(field) : encodeQrModel2(field);
+      field.model === "1"
+        ? encodeLegacyQrModel1(field)
+        : oversizedMagnification
+        ? encodeQrModel2WithMask(field, field.mask)
+        : encodeQrModel2(field);
+    // The pinned Zebra preview device caps the effective module
+    // magnification at ten even though ^BQ accepts values through 100. Its
+    // oversized path also honors the requested mask and retains the firmware's
+    // vertical origin offset.
+    const magnification = Math.min(10, field.magnification);
+    const topPadding = oversizedMagnification
+      ? Math.max(0, field.magnification - magnification - 1)
+      : 0;
     const modules = allocate(symbol.size, symbol.size);
     for (let y = 0; y < symbol.size; y++) {
       for (let x = 0; x < symbol.size; x++) {
@@ -2812,12 +3057,12 @@ function rawBarcodeRaster(
       }
     }
     const raster = allocate(
-      symbol.size * field.magnification,
-      symbol.size * field.magnification
+      symbol.size * magnification,
+      topPadding + symbol.size * magnification
     );
-    blitRaster(raster, modules, 0, 0, {
-      scaleX: field.magnification,
-      scaleY: field.magnification,
+    blitRaster(raster, modules, 0, topPadding, {
+      scaleX: magnification,
+      scaleY: magnification,
     });
     return { raster, display: "" };
   }
