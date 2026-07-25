@@ -90,6 +90,34 @@ test("renders visual examples lazily and keeps device commands code-only", async
   await expect(page.getByText("Renderer", { exact: true })).toHaveCount(0);
 });
 
+test("renders distinct, resolved ^FC clock examples", async ({ page }) => {
+  await page.goto("/zpl-commands/caret-fc#parameter-0-0-0-a");
+  const comparison = page.locator(".example-comparison").first();
+  await comparison.scrollIntoViewIfNeeded();
+
+  const previews = comparison.locator("img");
+  await expect(previews).toHaveCount(2);
+  await expect(previews.first()).toBeVisible({ timeout: 30_000 });
+  await expect(previews.last()).toBeVisible({ timeout: 30_000 });
+
+  const hashes = await previews.evaluateAll((images) =>
+    images.map((image) => {
+      const source = (image as HTMLImageElement).src;
+      let hash = 2_166_136_261;
+      for (let index = 0; index < source.length; index++) {
+        hash = Math.imul(hash ^ source.charCodeAt(index), 16_777_619) >>> 0;
+      }
+      return hash;
+    }),
+  );
+  expect(new Set(hashes).size).toBe(2);
+
+  const sources = await comparison.locator("pre").allTextContents();
+  expect(sources).toHaveLength(2);
+  expect(sources[0]).toContain("^FDPrimary [%]  %Y-%m-%d %H:%M:%S");
+  expect(sources[1]).toContain("^FDPrimary [@]  @Y-@m-@d @H:@M:@S");
+});
+
 test("opens a documentation example in a new editor workspace tab", async ({ page }) => {
   await page.goto("/editor");
   await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });

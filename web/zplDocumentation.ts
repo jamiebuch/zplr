@@ -127,11 +127,20 @@ const commandDefaultOverrides: Readonly<Record<string, Readonly<Record<string, s
   "^BR": { o: "N", a: "1", b: "2", c: "1", d: "50", e: "22" },
   "^BT": { o: "N", w: "2", r: "2", h: "50", s: "2", c: "4" },
   "^BX": { o: "N", h: "5", s: "200", c: "0", r: "0", f: "6", g: "_", a: "1" },
+  "^FC": { a: "%", b: "{", c: "#" },
   "^GF": { a: "A", b: "8", c: "8", d: "1", data: "FF818181818181FF" },
   "^IL": { d: "R", o: "ICON", x: "GRF" },
   "^IM": { d: "R", o: "ICON", x: "GRF" },
   "^XG": { d: "R", o: "ICON", x: "GRF", mx: "4", my: "4" },
   "~DG": { d: "R", o: "ICON", x: "GRF", t: "8", w: "1", data: "FF818181818181FF" },
+};
+
+const commandExampleValueOverrides: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  "^FC": {
+    a: ["%", "@"],
+    b: ["{", "&"],
+    c: ["#", "!"],
+  },
 };
 
 function sentenceName(value: string): string {
@@ -195,6 +204,15 @@ function curatedValues(
   return result.slice(0, 3);
 }
 
+function exampleValues(
+  command: string,
+  parameter: ZplDocumentationParameterSeed,
+  preview: boolean,
+): string[] {
+  const override = commandExampleValueOverrides[command]?.[parameter.key];
+  return override ? [...override] : curatedValues(parameter, preview);
+}
+
 function defaultValue(
   command: string,
   parameter: ZplDocumentationParameterSeed,
@@ -253,6 +271,26 @@ function zplCaption(command: string): string {
   return `${command.replace("^", "Caret ").replace("~", "Tilde ")} parameter example`;
 }
 
+function fieldClockBody(rawCommand: string, footer: string): string {
+  const [primary = "%", secondary = "{", tertiary = "#"] = rawCommand.slice(3).split(",");
+  const clockLine = (label: string, indicator: string): string =>
+    `${label} [${indicator}]  ${indicator}Y-${indicator}m-${indicator}d ${indicator}H:${indicator}M:${indicator}S`;
+
+  return [
+    "^ST07,20,2026,02,05,06,P",
+    "^SO2,0,0,0,1,0,0",
+    "^SO3,0,0,0,2,0,0",
+    "^FO36,55^A0N,30,26^FB568,3,28,L,0",
+    rawCommand,
+    `^FD${[
+      clockLine("Primary", primary || "%"),
+      clockLine("Secondary", secondary || "{"),
+      clockLine("Third", tertiary || "#"),
+    ].join("\\&")}^FS`,
+    footer,
+  ].join("\n");
+}
+
 function previewSource(
   command: string,
   category: CommandCategory,
@@ -287,6 +325,8 @@ function previewSource(
     body = `^FO48,90^A0N,42,38\n${rawCommand}^FS\n${footer}`;
   } else if (command === "^FR") {
     body = `^FO28,24^GB584,270,584,B,0^FS\n^FO80,125^A0N,42,38\n${rawCommand}\n^FDReverse field^FS\n${footer}`;
+  } else if (command === "^FC") {
+    body = fieldClockBody(rawCommand, footer);
   } else if (directTextCommands.has(command)) {
     body = `^FO48,75\n${rawCommand}\n^FDThe quick brown fox wraps across the label.^FS\n${footer}`;
   } else if (category === "graphic") {
@@ -360,7 +400,7 @@ function signatureGuides(
   return capability.signatures.map((signature, signatureIndex) => {
     const parameters = signature.parameters.map((parameter) => {
       const parameterId = `${signatureIndex}-${parameter.slot}-${parameter.component}-${exampleIdPart(parameter.key)}`;
-      const values = curatedValues(parameter, previewEnabled(capability));
+      const values = exampleValues(capability.canonical, parameter, previewEnabled(capability));
       return {
         id: parameterId,
         key: parameter.key,

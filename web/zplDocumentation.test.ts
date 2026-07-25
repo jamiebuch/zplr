@@ -75,6 +75,51 @@ describe("interactive ZPL documentation", () => {
     }
   });
 
+  it("creates executable ^FC examples with valid, visible clock indicators", async () => {
+    const guide = getZplCommandGuide("caret-fc");
+    expect(guide).toBeDefined();
+    const parameters = guide!.signatures[0]!.parameters;
+    expect(parameters.map(({ key, examples }) => ({
+      key,
+      values: examples.map(({ value }) => value),
+    }))).toEqual([
+      { key: "a", values: ["%", "@"] },
+      { key: "b", values: ["{", "&"] },
+      { key: "c", values: ["#", "!"] },
+    ]);
+
+    for (const example of parameters.flatMap(({ examples }) => examples)) {
+      const rawCommand = example.source.match(/\^FC[^\r\n]*/)?.[0];
+      expect(rawCommand, example.id).toBeDefined();
+      const indicators = rawCommand!.slice(3).split(",");
+      expect(new Set(indicators).size, example.id).toBe(3);
+      expect(indicators.every((indicator) => indicator.length === 1), example.id).toBe(true);
+
+      let resolvedSource = example.source.replaceAll(`${rawCommand}\n`, "");
+      const clockValues = [
+        ["2026", "07", "20", "14", "05", "06"],
+        ["2026", "07", "20", "15", "05", "06"],
+        ["2026", "07", "20", "16", "05", "06"],
+      ];
+      for (const [indicatorIndex, indicator] of indicators.entries()) {
+        for (const [tokenIndex, token] of ["Y", "m", "d", "H", "M", "S"].entries()) {
+          resolvedSource = resolvedSource.replaceAll(
+            `${indicator}${token}`,
+            clockValues[indicatorIndex]![tokenIndex]!,
+          );
+        }
+      }
+
+      const [clocked, resolved] = await Promise.all([
+        renderZpl(example.source),
+        renderZpl(resolvedSource),
+      ]);
+      expect(clocked.labels[0]!.raster.data, example.id).toEqual(
+        resolved.labels[0]!.raster.data,
+      );
+    }
+  });
+
   it("renders every advertised visual example to a label", async () => {
     const previewExamples = zplCommandGuides.flatMap((guide) =>
       guide.signatures.flatMap((signature) => [
