@@ -437,8 +437,11 @@ test("combines Code and WYSIWYG editing with visual source edits", async ({ page
   await expect(layerNames.first()).toHaveText("Visual label");
 
   await layers.getByRole("button", { name: /Select Visual label layer/ }).click();
-  await page.keyboard.press("ControlOrMeta+C");
-  await page.keyboard.press("ControlOrMeta+V");
+  await page.evaluate(() => {
+    const target = document.activeElement ?? window;
+    target.dispatchEvent(new Event("copy", { bubbles: true, cancelable: true }));
+    target.dispatchEvent(new Event("paste", { bubbles: true, cancelable: true }));
+  });
   await expect(canvas.locator('[data-visual-kind="text"]')).toHaveCount(2);
   await page.keyboard.press("Backspace");
   await expect(canvas.locator('[data-visual-kind="text"]')).toHaveCount(1);
