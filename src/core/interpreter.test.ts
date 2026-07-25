@@ -134,15 +134,15 @@ describe("semantic interpreter", () => {
     expect(lines.map((line) => line.indent)).toEqual([0, 5, 5]);
   });
 
-  it("hyphenates long words within a field block", () => {
+  it("breaks long words within a field block without adding a hyphen", () => {
     const result = layout(
       "^XA^CF0,10,5^FO0,0^FB15,3,0,L^FDABCDEFGHI^FS^XZ"
     );
     const lines = layoutTextLines(result.fields[0] as TextLayoutField);
-    expect(lines.map((line) => line.text)).toEqual(["ABCDE-", "FGHI"]);
+    expect(lines.map((line) => line.text)).toEqual(["ABCDE", "FGHI"]);
   });
 
-  it("includes character spacing when hyphenating field-block words", () => {
+  it("includes character spacing when breaking field-block words", () => {
     const result = layout(
       "^XA^CF0,10,5^FO0,0^FPH,4^FB15,10,0,L^FDABCDEFGHI^FS^XZ"
     );
@@ -363,7 +363,10 @@ describe("semantic interpreter", () => {
     expect(lines).toHaveLength(2);
     expect(lines[0].text).toBe("AB-");
     expect(lines[1].text).toBe("CDEFG");
-    expect(lines[1].overprints?.map((line) => line.text)).toEqual(["HIJKLM"]);
+    expect(lines[1].overprints?.map((line) => line.text)).toEqual([
+      "HIJKL",
+      "M",
+    ]);
   });
 
   it("resets every field-scoped selector while preserving label defaults", () => {

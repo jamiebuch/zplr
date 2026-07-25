@@ -65,9 +65,10 @@ time zone. Localized weekday and month names still depend on host `Intl` data.
 
 ## Text
 
-Font 0 uses bundled Noto Sans Condensed outline data. Font A uses bundled
-Spleen 5x8 bitmap data. These are deterministic open-font approximations; the
-project does not claim proprietary Zebra glyph parity.
+Font 0 uses bundled TeX Gyre Heros Condensed Bold outline data. Font A and the
+built-in barcode interpretation line use bundled Spleen 5x8 bitmap data.
+Width, height, baseline, and dot-grid behavior are calibrated against stable
+printer-preview rasters. These are deterministic open-font assets.
 
 `^A@` and `^CW` use the asynchronous `FontProvider` interface. Native
 TrueType/OpenType files downloaded with `~DY` render directly. Legacy `~DS`,

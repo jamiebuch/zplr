@@ -1,5 +1,5 @@
-import { NOTO_SANS_ADVANCE_RATIOS } from "@/assets/notoSansCondensed.generated";
 import { SPLEEN_5X8_ROWS } from "@/assets/spleen5x8.generated";
+import { TEX_GYRE_HEROS_ADVANCE_RATIOS } from "@/assets/texGyreHerosCondensed.generated";
 import type { MonochromeRaster } from "@/types/RenderJob";
 import { createMonochromeRaster, setDot } from "./raster";
 
@@ -112,15 +112,23 @@ export function residentFontMetrics(
   return base;
 }
 
-export function residentInkWidth(key: string, requestedWidth: number): number {
-  const width = Math.max(1, Math.trunc(requestedWidth));
+export function residentInkWidth(_key: string, requestedWidth: number): number {
+  return Math.max(1, Math.trunc(requestedWidth));
+}
+
+/** Adds the separately magnified intercharacter gap to a bitmap font cell. */
+export function residentAdvanceWidth(
+  key: string,
+  requestedWidth: number
+): number {
+  const width = residentInkWidth(key, requestedWidth);
   const metrics = residentFontMetrics(key);
   if (!metrics) return width;
-  const gap = Math.min(
-    width - 1,
-    Math.max(0, Math.round((metrics.intercharacterGap * width) / metrics.width))
+  const widthMultiplier = Math.min(
+    10,
+    Math.max(1, Math.round(width / metrics.width))
   );
-  return Math.max(1, width - gap);
+  return width + metrics.intercharacterGap * widthMultiplier;
 }
 
 export function residentUsesOutlineFace(key: string): boolean {
@@ -128,9 +136,18 @@ export function residentUsesOutlineFace(key: string): boolean {
 }
 
 export function residentAcceptsCharacter(key: string, character: string): boolean {
+  return residentCharacter(key, character) !== undefined;
+}
+
+/** Applies the firmware's uppercase-only resident-font behavior. */
+export function residentCharacter(
+  key: string,
+  character: string
+): string | undefined {
   const metrics = residentFontMetrics(key);
-  if (!metrics?.uppercaseOnly) return true;
-  return character === character.toUpperCase();
+  if (!metrics?.uppercaseOnly) return character;
+  const uppercase = character.toUpperCase();
+  return [...uppercase].length === 1 ? uppercase : undefined;
 }
 
 export function hasPinnedBitmapGlyph(character: string): boolean {
@@ -147,7 +164,7 @@ export function glyphAdvance(
   const width = Math.max(1, Math.trunc(requestedWidth));
   if (!proportional) return width;
   const codePoint = character.codePointAt(0) ?? 0x3f;
-  const ratio = NOTO_SANS_ADVANCE_RATIOS[codePoint];
+  const ratio = TEX_GYRE_HEROS_ADVANCE_RATIOS[codePoint];
   if (ratio !== undefined) return Math.max(1, Math.round(width * ratio));
   if (character === " ") return Math.max(1, Math.round(width * 0.5));
   if (/[.,:;!|'Il1]/u.test(character)) return Math.max(1, Math.round(width * 0.45));
@@ -163,22 +180,30 @@ export function rasterizeGlyph(
   proportional: boolean,
   fontKey = "A"
 ): MonochromeRaster {
-  const advance = glyphAdvance(character, width, proportional);
+  const advance = proportional
+    ? glyphAdvance(character, width, true)
+    : residentAdvanceWidth(fontKey, width);
   const raster = createMonochromeRaster(
     advance,
     Math.max(1, Math.trunc(height))
   );
-  if (!residentAcceptsCharacter(fontKey, character)) return raster;
-  const codePoint = character.codePointAt(0) ?? 0x3f;
+  const resident = residentCharacter(fontKey, character);
+  if (resident === undefined) return raster;
+  const codePoint = resident.codePointAt(0) ?? 0x3f;
   const rows =
-    character === "□"
+    resident === "□"
       ? [0, 0xf8, 0x88, 0x88, 0x88, 0xf8, 0, 0]
       : SPLEEN_5X8_ROWS[codePoint] ?? SPLEEN_5X8_ROWS[0x3f];
   const inkWidth = proportional
     ? raster.width
-    : residentInkWidth(fontKey, raster.width);
+    : Math.min(raster.width, residentInkWidth(fontKey, width));
   for (let y = 0; y < raster.height; y++) {
-    const sourceY = Math.min(7, Math.floor((y * 8) / raster.height));
+    // Spleen includes one blank cap row. Font B's native 11-dot matrix does
+    // not, so spread the open glyph's remaining seven rows over the cell.
+    const sourceY =
+      fontKey === "B"
+        ? Math.min(7, 1 + Math.floor((y * 7) / raster.height))
+        : Math.min(7, Math.floor((y * 8) / raster.height));
     for (let x = 0; x < inkWidth; x++) {
       const sourceX = Math.min(4, Math.floor((x * 5) / inkWidth));
       if ((rows[sourceY] & (0x80 >> sourceX)) !== 0) setDot(raster, x, y);

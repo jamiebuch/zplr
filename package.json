@@ -69,7 +69,7 @@
     "docs:conformance:check": "node --import tsx scripts/generate-conformance-docs.ts --check",
     "docs:commands": "node --import tsx scripts/generate-command-documentation.ts",
     "docs:commands:check": "node --import tsx scripts/generate-command-documentation.ts --check",
-    "font:noto:generate": "node scripts/generate-font-assets.mjs",
+    "font:resident:generate": "node scripts/generate-font-assets.mjs",
     "package:smoke": "node scripts/smoke-package.mjs",
     "package:lint": "publint --strict",
     "package:consumer": "node scripts/smoke-packed-consumer.mjs",
@@ -106,7 +106,6 @@
   "license": "MIT",
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
-    "@fontsource-variable/noto-sans": "5.2.10",
     "@headlessui/vue": "^1.7.23",
     "@iconify-prerendered/vue-mdi": "^0.28.1737398331",
     "@lhci/cli": "0.15.1",
@@ -130,8 +129,7 @@
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.7",
     "vue": "^3.5.40",
-    "vue-tsc": "^3.3.7",
-    "wawoff2": "2.0.1"
+    "vue-tsc": "^3.3.7"
   },
   "dependencies": {
     "bwip-js": "^4.11.2",

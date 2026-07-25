@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { renderZpl } from "@/index.node";
 
+function packedHash(data: Uint8Array): number {
+  let hash = 0x811c9dc5;
+  for (const byte of data) hash = Math.imul(hash ^ byte, 0x01000193);
+  return hash >>> 0;
+}
+
 const representativeBarcodes = [
   ["B0 Aztec", "^B0N,3,N,0,N,1^FDHELLO AZTEC"],
   ["B1 Code 11", "^BY2,2.5,40^B1N,N,40,N,N^FD1234567890"],
@@ -200,6 +206,43 @@ describe("extended ZPL barcode families", () => {
     expect(moduleHash(0)).toBe(0x93047379);
     expect(moduleHash(110)).toBe(0x2aeaf730);
   });
+
+  it.each([
+    ["^B0", "^B0N,3,N,99,N,1,0", 0x99ef90df],
+    ["^BO", "^BON,1,N,99,N,1,0", 0x58b4e513],
+  ] as const)(
+    "matches the printer preview for %s at 99-percent error control",
+    async (_name, command, expectedHash) => {
+      const result = await renderZpl(
+        `^XA^PW448^LL222^FO36,32${command}^FDHELLO AZTEC^FS^XZ`,
+        { printDensity: 8 }
+      );
+      expect(result.diagnostics.filter(({ severity }) => severity === "error")).toEqual(
+        []
+      );
+      expect(packedHash(result.labels[0].raster.data)).toBe(expectedHash);
+    }
+  );
+
+  it.each([
+    ["N", 0xe973b7ed],
+    ["R", 0x520256ed],
+    ["B", 0xf051f23d],
+  ] as const)(
+    "matches the printer QR anchor selected by orientation %s",
+    async (orientation, expectedHash) => {
+      const result = await renderZpl(
+        "^XA^PW448^LL222^FO36,32^BY2,2,90"
+          + `^BQ${orientation},2,4,Q,7`
+          + "^FDQA,ZPLR QR EXAMPLE^FS^XZ",
+        { printDensity: 8 }
+      );
+      expect(result.diagnostics.filter(({ severity }) => severity === "error")).toEqual(
+        []
+      );
+      expect(packedHash(result.labels[0].raster.data)).toBe(expectedHash);
+    }
+  );
 
   it("matches printer Data Matrix size, aspect, and automatic module geometry", async () => {
     const result = await renderZpl(

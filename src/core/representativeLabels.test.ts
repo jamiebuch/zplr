@@ -23,13 +23,13 @@ const FIXTURE_NAMES = [
 
 const EXPECTED_HASHES: Record<(typeof FIXTURE_NAMES)[number], string> = {
   "zplr.zpl":
-    "58632ada229f535d47ef2e3341a72775be2506a9650e2fb858a94aaf64036725",
+    "d6926211be561209307c9b3cb00a973221e65ad32e56a70097e9418b379759d1",
   "retail-upc-ean.zpl":
-    "43700e7414b26afb7be9d70482a9b1c65c4656cbf21d1e21c1c4ec5203096f23",
+    "913e18aff20c81e74cecbc2bb511cb468b4782aa13d5993035ae6226babeea3b",
   "asset-matrix-pdf417.zpl":
-    "1d1c921cef1e94415144439b6377dfc0a54fc4e4a952a1a8acefe65e5745fc7e",
+    "20c6f8efda56c24ccab8ab3edd3711da9be54ab39abc89ff2fbe50afa8c12337",
   "stored-resources.zpl":
-    "dc83d033da178df7185ddb496421bd78cd5339832896fec6310a253d8c858ce6",
+    "a2c9d2494c5a19c2b03c7f31b4c83a5fdcdf9a595d89302bc868ae3775a8e63d",
 };
 
 async function fixture(name: (typeof FIXTURE_NAMES)[number]): Promise<string> {

@@ -2,7 +2,7 @@
 
 ZPLr 0.3 is a deterministic ZPL and ZPL II parser and label renderer for ESM applications on Node.js 22/24 and evergreen browsers. It parses complete jobs, interprets virtual-printer state, renders a packed one-bit raster, and expands that raster to a required platform Canvas.
 
-The renderer profile is pinned to Zebra's ZPL programming guide published October 10, 2025. Deterministic output does not claim proprietary Zebra font parity or pixel parity with a physical printer.
+The renderer profile is pinned to the ZPL programming guide published October 10, 2025. Its rendering algorithms are verified against stable physical-printer preview captures. Bundled text uses only redistributable open-source font data.
 
 ## Install
 
@@ -92,7 +92,7 @@ Defaults limit each dimension to 32,768 dots, each label or temporary field rast
 
 The pinned profile currently contains 94 supported, 11 partially supported, and 2 unsupported rendering/job command identities. The remaining 116 device, network, printer, and RFID commands are recognized and raster-neutral. Exact limitations are listed in the generated [command table](./docs/COMMAND_SUPPORT.md) and [conformance map](./docs/CONFORMANCE.md).
 
-Representative raster hashes, independent barcode decoding, source spans, session state, malformed input, resource limits, and Node/browser parity are tested. ZPLr does not perform printing, networking, RFID operations, or filesystem resource lookup.
+Representative raster hashes, physical-printer dot-matrix fixtures, independent barcode decoding, source spans, session state, malformed input, resource limits, and Node/browser parity are tested. The external preview oracle is development-only; normal rendering remains deterministic, offline, and identical across Node and browser builds. ZPLr does not perform printing, networking, RFID operations, or filesystem resource lookup.
 
 ## 0.3 API freeze
 

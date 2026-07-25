@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRenderSession, renderZpl } from "@/index.node";
-import { notoSansCondensedTtf } from "@/assets/notoSansCondensed.generated";
+import { texGyreHerosCondensedOtf } from "@/assets/texGyreHerosCondensed.generated";
 import type { MonochromeRaster } from "@/types/RenderJob";
 import { getDot } from "./raster";
 import { interpretLabel } from "./interpreter";
@@ -105,7 +105,7 @@ describe("additional rendering commands", () => {
     const lowercaseOnly = await renderZpl(
       "^XA^PW100^LL30^FO0,0^ABN^FDabc^FS^XZ"
     );
-    expect(lowercaseOnly.labels[0].raster.data.every((byte) => byte === 0)).toBe(
+    expect(lowercaseOnly.labels[0].raster.data.some((byte) => byte !== 0)).toBe(
       true
     );
   });
@@ -191,6 +191,27 @@ describe("additional rendering commands", () => {
     );
     expect(retained.labels[0]).toMatchObject({ width: 20, height: 10 });
     expect(getDot(retained.labels[0].raster, 2, 2)).toBe(true);
+
+    const ignoredUnsupportedPair = await renderZpl(
+      "^XA^MUD,200,300^PW20^LL10^FO1,1^GB1,1,1^FS^XZ",
+      { printDensity: 8 }
+    );
+    expect(ignoredUnsupportedPair.labels[0]).toMatchObject({
+      width: 20,
+      height: 10,
+    });
+    expect(getDot(ignoredUnsupportedPair.labels[0].raster, 1, 1)).toBe(true);
+
+    const clippedInches = await renderZpl(
+      "^XA^PW10^LL10^MUI^FO1,1^A0N,1,1^FDX^FS^XZ",
+      { printDensity: 8 }
+    );
+    expect(clippedInches.labels[0].raster.data.every((byte) => byte === 0)).toBe(
+      true
+    );
+    expect(clippedInches.diagnostics.map(({ code }) => code)).not.toContain(
+      "LABEL_LIMIT_EXCEEDED"
+    );
   });
 
   it("rejects JavaScript-only numeric syntax in ZPL parameters", async () => {
@@ -598,7 +619,7 @@ describe("additional rendering commands", () => {
     const png =
       "89504E470D0A1A0A0000000D49484452000000010000000108000000003A7E9B55" +
       "0000000A49444154789C636000000002000148AFA4710000000049454E44AE426082";
-    const font = notoSansCondensedTtf();
+    const font = texGyreHerosCondensedOtf();
     const source =
       `~DYR:DOT.GRF,B,G,1,1,${String.fromCharCode(0x80)}` +
       `~DYR:ONE.PNG,A,P,67,,${png}` +

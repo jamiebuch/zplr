@@ -71,4 +71,26 @@ describe("printer-conformant CODABLOCK", () => {
       })
     ).toThrow(/row width/);
   });
+
+  it("leaves unsupported CODABLOCK modes empty like printer firmware", async () => {
+    const result = await renderZpl(
+      "^XA^PW448^LL222^FO20,20^BY2^BBN,8,Y,8,0,X^FDCODABLOCK^FS^XZ"
+    );
+    expect(result.labels[0].raster.data.every((byte) => byte === 0)).toBe(true);
+  });
+
+  it("matches the single-row CODABLOCK F form for wide columns", async () => {
+    const result = await renderZpl(
+      "^XA^PW448^LL222^FO36,32^BY2,2,90"
+        + "^BBN,8,Y,62,0,F^FDCODABLOCK^FS^XZ"
+    );
+    expect(result.labels[0].highlightRegions.at(-1)).toMatchObject({
+      type: "barcode",
+      x: 36,
+      y: 32,
+      width: 268,
+      height: 10,
+    });
+    expect(packedHash(result.labels[0].raster.data)).toBe(0x5922756d);
+  });
 });

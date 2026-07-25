@@ -146,6 +146,12 @@ export function strokeRoundedRect(
   const h = Math.max(1, Math.trunc(height));
   const t = Math.min(Math.max(1, Math.trunc(thickness)), Math.ceil(Math.min(w, h) / 2));
   const radius = (Math.min(8, Math.max(0, rounding)) / 8) * (Math.min(w, h) / 2);
+  // The rounded one-dot box is an inclusive 2x2 primitive. The regular
+  // ^GB path remains exclusive at the right and bottom edges.
+  if (w === 1 && h === 1 && radius > 0) {
+    fillRect(raster, x, y, 2, 2, operation);
+    return;
+  }
   if (radius <= 0) {
     strokeRect(raster, x, y, w, h, t, operation);
     return;
@@ -200,6 +206,71 @@ export function drawLine(
   }
 }
 
+function strokeOvalEquation(
+  raster: MonochromeRaster,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radiusX: number,
+  radiusY: number,
+  centerX: number,
+  centerY: number,
+  effectiveThickness: number,
+  operation: DotOperation = "set"
+): void {
+  const innerRadiusX = Math.max(0, radiusX - effectiveThickness);
+  const innerRadiusY = Math.max(0, radiusY - effectiveThickness);
+  for (let py = 0; py <= height; py++) {
+    for (let px = 0; px <= width; px++) {
+      const dx = (px - centerX) / radiusX;
+      const dy = (py - centerY) / radiusY;
+      const outer = dx * dx + dy * dy <= 1;
+      const inner =
+        innerRadiusX > 0 &&
+        innerRadiusY > 0 &&
+        ((px - centerX) / innerRadiusX) ** 2 +
+          ((py - centerY) / innerRadiusY) ** 2 <
+          1;
+      if (outer && !inner) setDot(raster, x + px, y + py, operation);
+    }
+  }
+}
+
+/** Draws a ^GC circle using the printer's asymmetric inclusive scan bounds. */
+export function strokeCircle(
+  raster: MonochromeRaster,
+  x: number,
+  y: number,
+  diameter: number,
+  thickness: number,
+  operation: DotOperation = "set"
+): void {
+  const d = Math.max(3, Math.trunc(diameter));
+  if (d === 3) {
+    fillRect(raster, x, y + 1, 2, 1, operation);
+    return;
+  }
+  if (d === 4 || d === 5) {
+    fillRect(raster, x, y + 1, 4, 3, operation);
+    return;
+  }
+  strokeOvalEquation(
+    raster,
+    x,
+    y,
+    d,
+    d,
+    (d + 1.5) / 2,
+    (d - 1) / 2,
+    d / 2,
+    d / 2,
+    Math.max(3, Math.trunc(thickness) + 1),
+    operation
+  );
+}
+
+/** Draws a ^GE ellipse using the printer's inward, inclusive border. */
 export function strokeEllipse(
   raster: MonochromeRaster,
   x: number,
@@ -211,30 +282,27 @@ export function strokeEllipse(
 ): void {
   const w = Math.max(3, Math.trunc(width));
   const h = Math.max(3, Math.trunc(height));
-  // Zebra's circle/ellipse commands have a two-dot documented minimum and
-  // render the inclusive inner edge. This produces a three-dot minimum ring.
-  const t = Math.max(3, Math.trunc(thickness) + 1);
-  const rx = w / 2;
-  const ry = Math.max(1, (h - 2) / 2);
-  const innerRx = Math.max(0, rx - t);
-  const innerRy = Math.max(0, ry - t);
-  for (let py = 1; py < h - 1; py++) {
-    for (let px = 0; px < w; px++) {
-      const dx = (px + 0.5 - rx) / rx;
-      const dy = (py - h / 2) / ry;
-      const outer = dx * dx + dy * dy <= 1;
-      const inner =
-        innerRx > 0 &&
-        innerRy > 0 &&
-        ((px + 0.5 - rx) / innerRx) ** 2 +
-          ((py - h / 2) / innerRy) ** 2 <
-          1;
-      if (outer && !inner) setDot(raster, x + px, y + py, operation);
-    }
+  if (w >= 4095 && h <= 4) return;
+  if (h === 3 && w <= 5) {
+    fillRect(raster, x + Math.floor((w - 2) / 2), y + 1, 2, 1, operation);
+    return;
   }
+  strokeOvalEquation(
+    raster,
+    x,
+    y,
+    w,
+    h,
+    Math.max(0.5, (w - 1) / 2),
+    Math.max(0.5, (h - 1.5) / 2),
+    w / 2,
+    h / 2 - 0.5,
+    Math.max(1, Math.trunc(thickness) + 2),
+    operation
+  );
 }
 
-/** Rasterizes ^GD one scanline at a time, matching its exclusive end point. */
+/** Rasterizes ^GD at scanline midpoints with the printer's horizontal stroke. */
 export function drawDiagonal(
   raster: MonochromeRaster,
   x: number,
@@ -247,15 +315,15 @@ export function drawDiagonal(
 ): void {
   const w = Math.max(3, Math.trunc(width));
   const h = Math.max(3, Math.trunc(height));
-  const t = Math.max(1, Math.trunc(thickness));
-  const half = Math.floor(t / 2);
+  const t = Math.max(2, Math.trunc(thickness));
+  const tinyRightAdjustment = direction === "R" && w <= 4 && h <= 4 ? 1 : 0;
   for (let py = 0; py < h; py++) {
-    const progress = py / h;
-    const center =
+    const progress = Math.round(((py + 0.5) * w) / h);
+    const start =
       direction === "R"
-        ? x + Math.round(w * (1 - progress))
-        : x + Math.round(w * progress);
-    fillRect(raster, center - half, y + py, t, 1, operation);
+        ? x + w - progress - 1 + tinyRightAdjustment
+        : x + progress + Math.max(0, t - 2);
+    fillRect(raster, start, y + py, t, 1, operation);
   }
 }
 

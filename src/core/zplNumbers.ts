@@ -17,6 +17,15 @@ export function zplInteger(value: string | undefined): number | undefined {
 }
 
 const FORMAT_DPI = new Set([150, 200, 300, 600]);
+const FORMAT_DPI_CONVERSIONS = new Set([
+  "150:150",
+  "150:300",
+  "150:600",
+  "200:200",
+  "200:600",
+  "300:300",
+  "600:600",
+]);
 
 export interface ZplDpiConversion {
   base: number;
@@ -34,7 +43,7 @@ export function zplDpiConversion(
     desired !== undefined &&
     FORMAT_DPI.has(base) &&
     FORMAT_DPI.has(desired) &&
-    desired >= base
+    FORMAT_DPI_CONVERSIONS.has(`${base}:${desired}`)
     ? { base, desired }
     : undefined;
 }

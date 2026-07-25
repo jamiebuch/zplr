@@ -216,7 +216,21 @@ describe("shared renderer", () => {
     const [narrowResult] = await renderDocument(narrow, { width: 40, height: 20 });
     const [wideResult] = await renderDocument(wide, { width: 40, height: 20 });
     expect(narrowResult.highlightRegions.at(-1)?.width).toBe(6);
-    expect(wideResult.highlightRegions.at(-1)?.width).toBe(13);
+    expect(wideResult.highlightRegions.at(-1)?.width).toBe(15);
+  });
+
+  it("magnifies resident bitmap cells and intercharacter gaps separately", async () => {
+    const result = await renderZpl(
+      "^XA^PW180^LL60^FO0,0^AAN,30,30^FDTT^FS"
+        + "^FO0,35^CFA,9,5^FDTT^FS^XZ"
+    );
+    const text = result.labels[0].highlightRegions.filter(
+      (region) => region.type === "text"
+    );
+    expect(text.map(({ width, height }) => [width, height])).toEqual([
+      [72, 27],
+      [12, 9],
+    ]);
   });
 
   it("applies field-block alignment and line spacing", async () => {
@@ -260,10 +274,10 @@ describe("shared renderer", () => {
     expect(rightCaret.end).toBe(100);
 
     const justifiedDocument = parseDocument(
-      "^XA^FO0,0^A0N,20,10^FB60,2,0,J^FDAA BB CC DDD EE^FS^XZ"
+      "^XA^FO0,0^A0N,20,10^FB60,2,0,J^FDAA BB CC D EE^FS^XZ"
     );
     const leftDocument = parseDocument(
-      "^XA^FO0,0^A0N,20,10^FB60,2,0,L^FDAA BB CC DDD EE^FS^XZ"
+      "^XA^FO0,0^A0N,20,10^FB60,2,0,L^FDAA BB CC D EE^FS^XZ"
     );
     const [justified] = await renderDocument(justifiedDocument, {
       width: 110,
@@ -320,14 +334,14 @@ describe("shared renderer", () => {
     );
   });
 
-  it("supports both barcode interpretation-line positions", async () => {
+  it("moves a requested barcode interpretation line above the bars", async () => {
     const document = parseDocument(
       "^XA^FO0,0^BY2,3,30^B3N,N,30,Y,Y^FD123^FS^XZ"
     );
     const [result] = await renderDocument(document, { width: 200, height: 100 });
     expect(
       result.highlightRegions.find((region) => region.type === "barcode")
-    ).toMatchObject({ height: 56 });
+    ).toMatchObject({ height: 59 });
   });
 
   it("uses Code 128 automatic packing only in mode A", async () => {
@@ -388,7 +402,7 @@ describe("shared renderer", () => {
     );
   });
 
-  it("ignores the printer's QR mask parameter and grows versions automatically", async () => {
+  it("honors the printer's QR mask parameter and grows versions automatically", async () => {
     const maskOne = parseDocument(
       "^XA^FO0,0^BQN,2,2,Q,1^FDQA,HELLO^FS^XZ"
     );
@@ -401,7 +415,7 @@ describe("shared renderer", () => {
     const [one] = await renderDocument(maskOne, { width: 300, height: 300 });
     const [seven] = await renderDocument(maskSeven, { width: 300, height: 300 });
     const [longResult] = await renderDocument(long, { width: 300, height: 300 });
-    expect(await one.canvas.toBuffer("png")).toEqual(
+    expect(await one.canvas.toBuffer("png")).not.toEqual(
       await seven.canvas.toBuffer("png")
     );
     const shortRegion = seven.highlightRegions.find(

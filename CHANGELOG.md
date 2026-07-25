@@ -17,6 +17,7 @@ All notable changes follow Keep a Changelog. ZPLr uses semantic versioning from 
 - `zplr` is now the Node-default alias; ESM on Node 22/24 and evergreen browsers is the supported runtime baseline.
 - Command capability lookup requires a full identity such as `^FO` or `~DG`.
 - Rendering now has one canonical parser → interpreter → packed-raster → platform-canvas pipeline.
+- Raster output now follows physical-printer captures for graphic primitives, QR/Aztec/CODABLOCK/GS1 and postal barcode geometry, interpretation lines, unit conversion, and resident-font metrics. Font 0 uses the bundled open-source TeX Gyre Heros Condensed Bold substitute.
 - Syntax and semantic failures plus safety limits resolve through diagnostics; documented parameter defaults remain silent, while operational host-adapter and user-callback/provider failures reject.
 
 ### Removed

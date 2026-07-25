@@ -3,7 +3,7 @@ import {
   createRenderSession,
   renderZpl,
 } from "@/index.node";
-import { notoSansCondensedTtf } from "@/assets/notoSansCondensed.generated";
+import { texGyreHerosCondensedOtf } from "@/assets/texGyreHerosCondensed.generated";
 import type { DownloadedFontSource } from "@/types/RenderJob";
 import { getDot } from "./raster";
 
@@ -433,7 +433,7 @@ describe("modern render jobs", () => {
     const provider = {
       async resolveFont(name: string) {
         requested.push(name);
-        return notoSansCondensedTtf();
+        return texGyreHerosCondensedOtf();
       },
     };
     const direct = await renderZpl(
@@ -492,7 +492,7 @@ describe("modern render jobs", () => {
         fontProvider: {
           async resolveFont(name: string, source?: DownloadedFontSource) {
             requests.push({ name, source });
-            return notoSansCondensedTtf();
+            return texGyreHerosCondensedOtf();
           },
         },
       }
@@ -525,7 +525,7 @@ describe("modern render jobs", () => {
         fontProvider: {
           async resolveFont(_name, source) {
             if (source) sources.push(source);
-            return notoSansCondensedTtf();
+            return texGyreHerosCondensedOtf();
           },
         },
       }

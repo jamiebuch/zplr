@@ -2,15 +2,32 @@ import { describe, expect, it } from "vitest";
 import {
   blitRaster,
   createMonochromeRaster,
+  drawDiagonal,
   fillRect,
   getDot,
   rasterToRgba,
   setDot,
+  strokeCircle,
+  strokeEllipse,
   strokeRoundedRect,
   transformRaster,
 } from "./raster";
 
 describe("monochrome raster", () => {
+  function darkDots(
+    raster: ReturnType<typeof createMonochromeRaster>,
+    originX = 0,
+    originY = 0
+  ): Array<[number, number]> {
+    const dots: Array<[number, number]> = [];
+    for (let y = 0; y < raster.height; y++) {
+      for (let x = 0; x < raster.width; x++) {
+        if (getDot(raster, x, y)) dots.push([x - originX, y - originY]);
+      }
+    }
+    return dots;
+  }
+
   it("packs black dots MSB-first and keeps row-tail bits clear", () => {
     const raster = createMonochromeRaster(10, 2);
     expect(raster.stride).toBe(2);
@@ -65,6 +82,58 @@ describe("monochrome raster", () => {
         }
       }
     }
+  });
+
+  it("matches the printer's inclusive minimum graphic primitives", () => {
+    const raster = createMonochromeRaster(32, 20);
+
+    strokeRoundedRect(raster, 1, 1, 1, 1, 1, 8);
+    expect(darkDots(raster, 1, 1)).toEqual([
+      [0, 0],
+      [1, 0],
+      [0, 1],
+      [1, 1],
+    ]);
+
+    const circle = createMonochromeRaster(8, 8);
+    strokeCircle(circle, 1, 1, 3, 1);
+    expect(darkDots(circle, 1, 1)).toEqual([
+      [0, 1],
+      [1, 1],
+    ]);
+
+    const ellipse = createMonochromeRaster(8, 8);
+    strokeEllipse(ellipse, 1, 1, 4, 3, 1);
+    expect(darkDots(ellipse, 1, 1)).toEqual([
+      [1, 1],
+      [2, 1],
+    ]);
+  });
+
+  it("matches the printer's scanline geometry for graphic diagonals", () => {
+    const right = createMonochromeRaster(12, 8);
+    drawDiagonal(right, 1, 1, 4, 3, 1, "R");
+    expect(darkDots(right, 1, 1)).toEqual([
+      [3, 0],
+      [4, 0],
+      [2, 1],
+      [3, 1],
+      [1, 2],
+      [2, 2],
+    ]);
+
+    const left = createMonochromeRaster(28, 14);
+    drawDiagonal(left, 1, 1, 20, 10, 3, "L");
+    expect(darkDots(left, 1, 1)).toEqual(
+      Array.from({ length: 10 }, (_, y) => {
+        const start = Math.round(((y + 0.5) * 20) / 10) + 1;
+        return [
+          [start, y],
+          [start + 1, y],
+          [start + 2, y],
+        ] as Array<[number, number]>;
+      }).flat()
+    );
   });
 
   it("blits rotations and applies label transforms deterministically", () => {

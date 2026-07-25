@@ -105,6 +105,8 @@ interface PendingCode128 {
 interface PendingQr {
   symbology: "BQ";
   commandIndex: number;
+  orientation: Orientation;
+  height: number;
   model: "1" | "2";
   magnification: number;
   reliability: "H" | "Q" | "M" | "L";
@@ -268,6 +270,23 @@ function yesNo(value: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
+function interpretationPlacement(
+  printValue: string | undefined,
+  aboveValue: string | undefined,
+  printFallback: boolean,
+  aboveFallback: boolean
+): {
+  printInterpretationBelow: boolean;
+  printInterpretationAbove: boolean;
+} {
+  const print = yesNo(printValue, printFallback);
+  const above = yesNo(aboveValue, aboveFallback);
+  return {
+    printInterpretationBelow: print && !above,
+    printInterpretationAbove: print && above,
+  };
+}
+
 export function normalizeResourceName(
   value: string,
   defaultExtension: "GRF" | "ZPL" | "DAT" = "GRF",
@@ -328,6 +347,14 @@ function resolveDimensions(
     width = resident.width * widthMultiplier;
   }
   return { height, width };
+}
+
+function dimensionFontKey(
+  key: string,
+  hasDownloadedAlias: boolean
+): string {
+  if (key === "0" || isResidentFontKey(key)) return key;
+  return hasDownloadedAlias ? "0" : "A";
 }
 
 function touchField(
@@ -1093,12 +1120,12 @@ export function interpretLabel(
             model: barcode.model,
             x: field.x,
             y: field.y,
-            orientation: "N",
+            orientation: barcode.orientation,
             reverse,
             commandIndex: barcode.commandIndex,
             sourceSpan,
             moduleWidth: barcode.magnification,
-            height: 0,
+            height: barcode.height,
             magnification: barcode.magnification,
             mask: barcode.mask,
             printInterpretationBelow: false,
@@ -1360,7 +1387,7 @@ export function interpretLabel(
           ? labelState.defaultFont.key
           : "A";
         const dimensions = resolveDimensions(
-          key,
+          dimensionFontKey(key, fontAliases?.has(key) ?? false),
           optionalDot(args[1], 0, 32000),
           optionalDot(args[2], 0, 32000),
           labelState.defaultFont,
@@ -1486,7 +1513,7 @@ export function interpretLabel(
           key,
           name: fontAliases?.get(key),
           ...resolveDimensions(
-            key,
+            dimensionFontKey(key, fontAliases?.has(key) ?? false),
             optionalDot(args[1], 0, 32000),
             optionalDot(args[2], 0, 32000),
             labelState.defaultFont,
@@ -1690,9 +1717,9 @@ export function interpretLabel(
       case "GE": {
         field.graphic = {
           kind: "ellipse",
-          width: dotValue(args[0], 3, 3, 32000),
-          height: dotValue(args[1], 3, 3, 32000),
-          thickness: dotValue(args[2], 1, 1, 32000),
+          width: dotValue(args[0], 3, 3, 4095),
+          height: dotValue(args[1], 3, 3, 4095),
+          thickness: dotValue(args[2], 1, 1, 4095),
           color: trimmed(args[3]) === "W" ? "W" : "B",
           commandIndex: node.index,
         };
@@ -1947,6 +1974,7 @@ export function interpretLabel(
             layers,
             zplAutoFormat: automaticFormat,
             zplFixedSize: layers > 0,
+            zplErrorControl: size,
             eclevel:
               size >= 1 && size <= 99
                 ? Math.min(95, Math.max(5, size))
@@ -1972,8 +2000,7 @@ export function interpretLabel(
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           ratio: labelState.barcodeDefaults.ratio,
           height: dotValue(args[2], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: yesNo(args[3], true),
-          printInterpretationAbove: yesNo(args[4], false),
+          ...interpretationPlacement(args[3], args[4], true, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: { zplCheckCount: yesNo(args[1], false) ? 1 : 2 },
         };
@@ -1991,8 +2018,7 @@ export function interpretLabel(
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           ratio: labelState.barcodeDefaults.ratio,
           height: dotValue(args[1], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: yesNo(args[2], true),
-          printInterpretationAbove: yesNo(args[3], false),
+          ...interpretationPlacement(args[2], args[3], true, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: {
             zplMod10: yesNo(args[4], false),
@@ -2050,8 +2076,7 @@ export function interpretLabel(
           orientation: orientationValue(args[0], labelState.defaultOrientation),
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           height: dotValue(args[1], labelState.barcodeDefaults.height, 1, 9999),
-          printInterpretationBelow: yesNo(args[2], false),
-          printInterpretationAbove: yesNo(args[3], false),
+          ...interpretationPlacement(args[2], args[3], false, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: {},
         };
@@ -2071,8 +2096,7 @@ export function interpretLabel(
             1,
             32000
           ),
-          printInterpretationBelow: yesNo(args[3], true),
-          printInterpretationAbove: yesNo(args[4], false),
+          ...interpretationPlacement(args[3], args[4], true, false),
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           ratio: labelState.barcodeDefaults.ratio,
           interpretationFont: {
@@ -2105,8 +2129,7 @@ export function interpretLabel(
             1,
             32000
           ),
-          printInterpretationBelow: yesNo(args[2], true),
-          printInterpretationAbove: yesNo(args[3], false),
+          ...interpretationPlacement(args[2], args[3], true, false),
           uccCheckDigit: yesNo(args[4], false),
           mode: ["N", "U", "A", "D"].includes(modeCandidate)
             ? (modeCandidate as "N" | "U" | "A" | "D")
@@ -2137,8 +2160,7 @@ export function interpretLabel(
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           ratio: labelState.barcodeDefaults.ratio,
           height: dotValue(args[1], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: yesNo(args[2], false),
-          printInterpretationAbove: yesNo(args[3], false),
+          ...interpretationPlacement(args[2], args[3], false, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: { zplPostalType: postalType },
         };
@@ -2176,6 +2198,8 @@ export function interpretLabel(
         field.barcode = {
           symbology: "BQ",
           commandIndex: node.index,
+          orientation: orientationValue(args[0], labelState.defaultOrientation),
+          height: labelState.barcodeDefaults.height,
           model,
           magnification: numberValue(
             args[2],
@@ -2243,8 +2267,7 @@ export function interpretLabel(
           orientation: orientationValue(args[0], labelState.defaultOrientation),
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           height: dotValue(args[1], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: yesNo(args[2], true),
-          printInterpretationAbove: yesNo(args[3], false),
+          ...interpretationPlacement(args[2], args[3], true, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: {
             includecheck: true,
@@ -2256,9 +2279,8 @@ export function interpretLabel(
         touchField(field, node, labelState.reverse);
         break;
       case "BB": {
-        const mode = ["A", "E", "F"].includes(trimmed(args[5]))
-          ? trimmed(args[5])
-          : "F";
+        const requestedMode = trimmed(args[5]);
+        const mode = requestedMode === "" ? "F" : requestedMode;
         const explicitHeight = trimmed(args[1]) !== "";
         const columnsSpecified = trimmed(args[3]) !== "";
         const rowsSpecified =
@@ -2362,8 +2384,7 @@ export function interpretLabel(
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           ratio: labelState.barcodeDefaults.ratio,
           height: dotValue(args[1], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: yesNo(args[2], true),
-          printInterpretationAbove: yesNo(args[3], false),
+          ...interpretationPlacement(args[2], args[3], true, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: {},
         };
@@ -2381,8 +2402,7 @@ export function interpretLabel(
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           ratio: labelState.barcodeDefaults.ratio,
           height: dotValue(args[2], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: yesNo(args[3], true),
-          printInterpretationAbove: yesNo(args[4], false),
+          ...interpretationPlacement(args[3], args[4], true, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: {
             zplStart: /^[ABCD]$/.test(trimmed(args[5])) ? trimmed(args[5]) : "A",
@@ -2403,8 +2423,7 @@ export function interpretLabel(
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           ratio: labelState.barcodeDefaults.ratio,
           height: dotValue(args[1], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: true,
-          printInterpretationAbove: yesNo(args[2], false),
+          ...interpretationPlacement("Y", args[2], true, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: { includecheck: true, includecheckintext: false },
         };
@@ -2425,8 +2444,7 @@ export function interpretLabel(
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           ratio: labelState.barcodeDefaults.ratio,
           height: dotValue(args[2], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: yesNo(args[3], true),
-          printInterpretationAbove: yesNo(args[4], false),
+          ...interpretationPlacement(args[3], args[4], true, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: {
             includecheck: selection !== "A",
@@ -2454,8 +2472,7 @@ export function interpretLabel(
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           ratio: labelState.barcodeDefaults.ratio,
           height: dotValue(args[2], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: yesNo(args[3], true),
-          printInterpretationAbove: yesNo(args[4], false),
+          ...interpretationPlacement(args[3], args[4], true, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: { includecheckintext: yesNo(args[1], false) },
         };
@@ -2529,8 +2546,7 @@ export function interpretLabel(
           orientation: orientationValue(args[0], labelState.defaultOrientation),
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           height: dotValue(args[1], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: yesNo(args[2], true),
-          printInterpretationAbove: yesNo(args[3], true),
+          ...interpretationPlacement(args[2], args[3], true, true),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: {},
         };
@@ -2630,8 +2646,7 @@ export function interpretLabel(
           orientation: orientationValue(args[0], labelState.defaultOrientation),
           moduleWidth: labelState.barcodeDefaults.moduleWidth,
           height: dotValue(args[1], labelState.barcodeDefaults.height, 1, 32000),
-          printInterpretationBelow: yesNo(args[2], true),
-          printInterpretationAbove: yesNo(args[3], false),
+          ...interpretationPlacement(args[2], args[3], true, false),
           interpretationFont: { ...(field.font ?? labelState.defaultFont) },
           encoderOptions: {
             zplPrintCheck:

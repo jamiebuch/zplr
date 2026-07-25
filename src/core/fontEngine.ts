@@ -1,9 +1,10 @@
 import * as opentypeModule from "opentype.js";
 import type { Font, PathCommand } from "opentype.js";
 import {
-  NOTO_SANS_VARIATION,
-  notoSansCondensedTtf,
-} from "@/assets/notoSansCondensed.generated";
+  TEX_GYRE_HEROS_TOP_OFFSET_RATIO,
+  TEX_GYRE_HEROS_VERTICAL_SCALE,
+  texGyreHerosCondensedOtf,
+} from "@/assets/texGyreHerosCondensed.generated";
 import type { FontProvider, MonochromeRaster } from "@/types/RenderJob";
 import { createMonochromeRaster, setDot } from "./raster";
 
@@ -56,7 +57,7 @@ export class OpenTypeFontEngine {
   private cachedGlyphPixels = 0;
   private readonly builtIn = Promise.resolve().then(() => {
     try {
-      return parseFont(notoSansCondensedTtf());
+      return parseFont(texGyreHerosCondensedOtf());
     } catch {
       return undefined;
     }
@@ -137,7 +138,10 @@ export class OpenTypeFontEngine {
               character,
               width,
               height,
-              NOTO_SANS_VARIATION
+              {
+                verticalScale: TEX_GYRE_HEROS_VERTICAL_SCALE,
+                topOffsetRatio: TEX_GYRE_HEROS_TOP_OFFSET_RATIO,
+              }
             )
           : undefined
       )
@@ -164,13 +168,20 @@ function rasterizeOutline(
   character: string,
   width: number,
   height: number,
-  variation?: Readonly<Record<string, number>>
+  calibration?: Readonly<{
+    variation?: Readonly<Record<string, number>>;
+    verticalScale?: number;
+    topOffsetRatio?: number;
+  }>
 ): MonochromeRaster | undefined {
   const variableFont = font as VariableFont;
   let glyph = font.charToGlyph(character) as unknown as GlyphOutline;
   if (glyph.index === 0 && character !== "\0") return undefined;
-  if (variation && variableFont.variation) {
-    glyph = variableFont.variation.getTransform(glyph, variation);
+  if (calibration?.variation && variableFont.variation) {
+    glyph = variableFont.variation.getTransform(
+      glyph,
+      calibration.variation
+    );
   }
 
   const raster = createMonochromeRaster(
@@ -189,10 +200,12 @@ function rasterizeOutline(
     font.tables.os2?.sCapHeight ?? Math.round(font.ascender * 0.7)
   );
   const scaleX = raster.width / advance;
-  const scaleY = raster.height / verticalUnits;
+  const scaleY =
+    (raster.height * (calibration?.verticalScale ?? 1)) / verticalUnits;
+  const topOffset = raster.height * (calibration?.topOffsetRatio ?? 0);
   const map = (point: Point): Point => ({
     x: point.x * scaleX,
-    y: (capHeight - point.y) * scaleY,
+    y: (capHeight - point.y) * scaleY + topOffset,
   });
   const contours = flatten(glyph.path.commands).map((contour) =>
     contour.map(map)

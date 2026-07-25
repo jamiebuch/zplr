@@ -84,7 +84,7 @@ Offsets are UTF-16 and spans are end-exclusive. Point lookup evaluates regions f
 
 ## Fonts
 
-Font 0 and Font A are bundled deterministic open-font approximations. Resolve named or downloaded outline fonts without granting filesystem access:
+Font 0 uses a calibrated TeX Gyre Heros Condensed Bold outline and Font A uses a calibrated Spleen bitmap, both under open font licenses. Resolve named or downloaded outline fonts without granting filesystem access:
 
 ```ts
 const job = await renderZpl(source, {

@@ -27,7 +27,8 @@ import {
   hasPinnedBitmapGlyph,
   isResidentFontKey,
   rasterizeGlyph,
-  residentAcceptsCharacter,
+  residentAdvanceWidth,
+  residentCharacter,
   residentInkWidth,
   residentUsesOutlineFace,
 } from "./bitmapFont";
@@ -43,7 +44,7 @@ import {
   type LegacyDataMatrixQuality,
 } from "./legacyDataMatrix";
 import { encodeLegacyQrModel1 } from "./legacyQrModel1";
-import { encodeQrModel2, encodeQrModel2WithMask } from "./qrModel2";
+import { encodeQrModel2WithMask } from "./qrModel2";
 import { encodeZplCode49, expandAutomaticCode49 } from "./code49";
 import { encodeZplCodablockA } from "./codablockA";
 import {
@@ -60,6 +61,7 @@ import {
   getDot,
   lastDarkRow,
   setDot,
+  strokeCircle,
   strokeEllipse,
   strokeRoundedRect,
   transformRaster,
@@ -215,6 +217,21 @@ function orientedSize(
     : { width, height };
 }
 
+function rectangleOutsideRaster(
+  raster: MonochromeRaster,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): boolean {
+  return (
+    x >= raster.width ||
+    y >= raster.height ||
+    x + width <= 0 ||
+    y + height <= 0
+  );
+}
+
 interface IndexedTextCharacter {
   character: string;
   start: number;
@@ -264,7 +281,11 @@ function orientTextCaretStops(
 function measureText(value: string, font: LayoutFont): number {
   const proportional = font.key === "0" || font.name !== undefined;
   return [...value].reduce(
-    (width, character) => width + glyphAdvance(character, font.width, proportional),
+    (width, character) =>
+      width +
+      (proportional
+        ? glyphAdvance(character, font.width, true)
+        : residentAdvanceWidth(font.key, font.width)),
     0
   );
 }
@@ -487,8 +508,7 @@ function splitLongWord(
   const visible = [...visibleText(word)];
   let count = 0;
   while (count < visible.length) {
-    const suffix = count + 1 < visible.length ? "-" : "";
-    const candidate = visible.slice(0, count + 1).join("") + suffix;
+    const candidate = visible.slice(0, count + 1).join("");
     if (count > 0 && measureFieldText(candidate, field) > availableWidth) break;
     count++;
   }
@@ -502,7 +522,7 @@ function splitLongWord(
   }
   while (characters[originalSplit] === "\u00ad") originalSplit++;
   return {
-    head: visible.slice(0, count).join("") + "-",
+    head: visible.slice(0, count).join(""),
     tail: characters.slice(originalSplit).join(""),
   };
 }
@@ -596,14 +616,18 @@ export function layoutTextLines(field: TextLayoutField): RasterTextLine[] {
       : field.block.mode === "FB" && field.block.hangingIndent > 0
       ? naturalWidth
       : field.font.width;
+  const blockJustification =
+    field.block.width > 0 ? field.block.justification : "L";
   const layoutField =
-    blockWidth === field.block.width
+    blockWidth === field.block.width &&
+    blockJustification === field.block.justification
       ? field
       : {
           ...field,
           block: {
             ...field.block,
             width: blockWidth,
+            justification: blockJustification,
           },
         };
   const lines: RasterTextLine[] = [];
@@ -663,7 +687,9 @@ async function glyphFor(
     engine = snapshotEngine;
   }
   const proportional = font.key === "0" || font.name !== undefined;
-  const advance = glyphAdvance(character, font.width, proportional);
+  const advance = proportional
+    ? glyphAdvance(character, font.width, true)
+    : residentAdvanceWidth(font.key, font.width);
   allocate.assert(advance, Math.max(1, font.height));
   if (font.name) {
     const lookupName = aliasedFontName(
@@ -722,16 +748,17 @@ async function glyphFor(
     );
     if (builtIn) return { raster: builtIn, substituted: false };
   } else if (isResidentFontKey(font.key)) {
-    if (!residentAcceptsCharacter(font.key, character)) {
+    const resident = residentCharacter(font.key, character);
+    if (resident === undefined) {
       return {
         raster: allocate(advance, Math.max(1, font.height)),
         substituted: false,
       };
     }
-    if (residentUsesOutlineFace(font.key) || !hasPinnedBitmapGlyph(character)) {
-      const inkWidth = residentInkWidth(font.key, advance);
+    if (residentUsesOutlineFace(font.key) || !hasPinnedBitmapGlyph(resident)) {
+      const inkWidth = residentInkWidth(font.key, font.width);
       const outline = await engine.rasterizeBuiltIn(
-        character,
+        resident,
         inkWidth,
         font.height
       );
@@ -743,7 +770,7 @@ async function glyphFor(
     }
     return {
       raster: rasterizeGlyph(
-        character,
+        resident,
         font.width,
         font.height,
         proportional,
@@ -921,6 +948,25 @@ async function renderTextField(
         characters.length * field.font.height +
           Math.max(0, characters.length - 1) * gap
     );
+    const oriented = orientedSize(field.orientation, logicalWidth, logicalHeight);
+    const rightAnchored = field.originJustification === "R";
+    const x = rightAnchored ? field.x - oriented.width : field.x;
+    if (
+      rectangleOutsideRaster(
+        target,
+        x,
+        field.y,
+        oriented.width,
+        oriented.height
+      )
+    ) {
+      return {
+        x,
+        y: field.y,
+        ...oriented,
+        substituted: false,
+      };
+    }
     const textRaster = allocate(logicalWidth, logicalHeight);
     const logicalCaretStops: TextCaretStop[] = [];
     let cursor = 0;
@@ -976,9 +1022,6 @@ async function renderTextField(
       }
       cursor += resolved.raster.height + gap;
     }
-    const oriented = orientedSize(field.orientation, logicalWidth, logicalHeight);
-    const rightAnchored = field.originJustification === "R";
-    const x = rightAnchored ? field.x - oriented.width : field.x;
     const size = blitRaster(target, textRaster, x, field.y, {
       orientation: field.orientation,
       operation: operation(field.reverse),
@@ -1061,6 +1104,42 @@ async function renderTextField(
       ? Math.min(field.block.height, naturalLogicalHeight)
       : naturalLogicalHeight
   );
+  const oriented = orientedSize(field.orientation, logicalWidth, logicalHeight);
+  const autoRight =
+    field.originJustification === "A" &&
+    (field.direction === "R" ||
+      [...field.data].map(bidiClass).find((value) => value !== "N") === "R");
+  const originRight = field.originJustification === "R" || autoRight;
+  const rightAnchored = field.direction === "R" ? !originRight : originRight;
+  const finalCharacter = singleLine
+    ? [...singleLine.text].at(-1) ?? ""
+    : "";
+  const typesetRightBearing =
+    rightAnchored &&
+    field.typeset === true &&
+    field.orientation === "N" &&
+    finalCharacter !== ""
+      ? measureFieldText(finalCharacter, field)
+      : 0;
+  const x = rightAnchored
+    ? field.x - oriented.width + typesetRightBearing
+    : field.x;
+  if (
+    rectangleOutsideRaster(
+      target,
+      x,
+      field.y,
+      oriented.width,
+      oriented.height
+    )
+  ) {
+    return {
+      x,
+      y: field.y,
+      ...oriented,
+      substituted: false,
+    };
+  }
   const textRaster = allocate(logicalWidth, logicalHeight);
   const logicalCaretStops: TextCaretStop[] = [];
   const op = operation(field.reverse);
@@ -1159,26 +1238,6 @@ async function renderTextField(
       await drawLine(overprint, lineIndex, lineIndex === lines.length - 1);
     }
   }
-  const oriented = orientedSize(field.orientation, logicalWidth, logicalHeight);
-  const autoRight =
-    field.originJustification === "A" &&
-    (field.direction === "R" ||
-      [...field.data].map(bidiClass).find((value) => value !== "N") === "R");
-  const originRight = field.originJustification === "R" || autoRight;
-  const rightAnchored = field.direction === "R" ? !originRight : originRight;
-  const finalCharacter = singleLine
-    ? [...singleLine.text].at(-1) ?? ""
-    : "";
-  const typesetRightBearing =
-    rightAnchored &&
-    field.typeset === true &&
-    field.orientation === "N" &&
-    finalCharacter !== ""
-      ? measureFieldText(finalCharacter, field)
-      : 0;
-  const x = rightAnchored
-    ? field.x - oriented.width + typesetRightBearing
-    : field.x;
   const size = blitRaster(target, textRaster, x, field.y, {
     orientation: field.orientation,
     operation: op,
@@ -1829,6 +1888,28 @@ function fillPolygonRaster(
   }
 }
 
+function fillMaxicodeHexagon(
+  raster: MonochromeRaster,
+  points: readonly DrawingPoint[]
+): void {
+  const minX = Math.max(0, Math.floor(Math.min(...points.map(([x]) => x))));
+  const maxX = Math.min(
+    raster.width - 1,
+    Math.ceil(Math.max(...points.map(([x]) => x)))
+  );
+  const minY = Math.max(0, Math.floor(Math.min(...points.map(([, y]) => y))));
+  const maxY = Math.min(
+    raster.height - 1,
+    Math.ceil(Math.max(...points.map(([, y]) => y)))
+  );
+  const maximumInset = Math.max(1, Math.floor((maxX - minX + 1) / 3));
+  for (let y = minY; y <= maxY; y++) {
+    const edgeDistance = Math.min(y - minY, maxY - y);
+    const inset = Math.max(0, maximumInset - edgeDistance);
+    fillRect(raster, minX + inset, y, maxX - minX + 1 - inset * 2, 1);
+  }
+}
+
 /**
  * Renders a BWIPP symbol without going through an intermediate PNG.  Matrix
  * composites expose compact rows through `raw()`, which loses the row-height
@@ -1922,6 +2003,7 @@ function renderMaxicode(
 ): MonochromeRaster {
   let raster = allocate(1, 1);
   let polygons: DrawingPoint[][] = [];
+  let hexagons: DrawingPoint[][] = [];
   let ellipses: Array<{
     x: number;
     y: number;
@@ -1968,7 +2050,7 @@ function renderMaxicode(
       polygons.push(points);
     },
     hexagon: (points: DrawingPoint[]) => {
-      polygons.push(points);
+      hexagons.push(points);
     },
     ellipse: (
       x: number,
@@ -1981,6 +2063,7 @@ function renderMaxicode(
     },
     fill: () => {
       for (const points of polygons) fillPolygonRaster(raster, points);
+      for (const points of hexagons) fillMaxicodeHexagon(raster, points);
       if (ellipses.length > 0) {
         const minX = Math.max(
           0,
@@ -2011,6 +2094,7 @@ function renderMaxicode(
         }
       }
       polygons = [];
+      hexagons = [];
       ellipses = [];
     },
     text: () => undefined,
@@ -2281,6 +2365,86 @@ function selectAutomaticAztec(
   }
 }
 
+const AZTEC_HIGH_EC_METRICS = [
+  ["compact", 1, 17, 6],
+  ["compact", 2, 40, 6],
+  ["compact", 3, 51, 8],
+  ["compact", 4, 76, 8],
+  ["full", 1, 21, 6],
+  ["full", 2, 48, 6],
+  ["full", 3, 60, 8],
+  ["full", 4, 88, 8],
+  ["full", 5, 120, 8],
+  ["full", 6, 156, 8],
+  ["full", 7, 196, 8],
+  ["full", 8, 240, 8],
+  ["full", 9, 230, 10],
+  ["full", 10, 272, 10],
+  ["full", 11, 316, 10],
+  ["full", 12, 364, 10],
+  ["full", 13, 416, 10],
+  ["full", 14, 470, 10],
+  ["full", 15, 528, 10],
+  ["full", 16, 588, 10],
+  ["full", 17, 652, 10],
+  ["full", 18, 720, 10],
+  ["full", 19, 790, 10],
+  ["full", 20, 864, 10],
+  ["full", 21, 940, 10],
+  ["full", 22, 1020, 10],
+  ["full", 23, 920, 12],
+  ["full", 24, 992, 12],
+  ["full", 25, 1066, 12],
+  ["full", 26, 1144, 12],
+  ["full", 27, 1224, 12],
+  ["full", 28, 1306, 12],
+  ["full", 29, 1392, 12],
+  ["full", 30, 1480, 12],
+  ["full", 31, 1570, 12],
+  ["full", 32, 1664, 12],
+] as const;
+
+function stuffedAztecCodewords(bits: string, wordSize: number): number {
+  let cursor = 0;
+  let codewords = 0;
+  while (cursor < bits.length) {
+    const remaining = bits.length - cursor;
+    const prefix = bits.slice(cursor, cursor + wordSize - 1);
+    const stuffed =
+      remaining >= wordSize &&
+      (/^0+$/.test(prefix) || /^1+$/.test(prefix));
+    cursor += stuffed ? wordSize - 1 : Math.min(wordSize, remaining);
+    codewords++;
+  }
+  return codewords;
+}
+
+function selectHighErrorAztec(
+  bits: string,
+  errorControl: number,
+  readerInitialization: boolean
+): RawMatrixBarcode {
+  for (const [format, layers, codewords, wordSize] of AZTEC_HIGH_EC_METRICS) {
+    const dataCapacity =
+      codewords - Math.floor((codewords * errorControl) / 100);
+    if (
+      (errorControl === 99 && (format !== "full" || layers < 16)) ||
+      (readerInitialization && (format !== "full" || layers > 22)) ||
+      stuffedAztecCodewords(bits, wordSize) > dataCapacity
+    ) {
+      continue;
+    }
+    return aztecMatrix(bits, {
+      raw: true,
+      format,
+      layers,
+      eclevel: 5,
+      ...(readerInitialization ? { readerinit: true } : {}),
+    });
+  }
+  throw new Error("Aztec data exceeds the requested error-control capacity.");
+}
+
 function matrixModuleRaster(
   raw: RawMatrixBarcode,
   allocate: RasterAllocator
@@ -2310,6 +2474,10 @@ function aztecRawSymbol(
   if (readerInitialization) baseOptions.readerinit = true;
   const layers = Number(encoderOptions.layers ?? 0);
   const automatic = encoderOptions.zplAutoFormat === true;
+  const errorControl = Number(encoderOptions.zplErrorControl ?? 0);
+  if (automatic && errorControl > 95) {
+    return selectHighErrorAztec(bits, errorControl, readerInitialization);
+  }
   if (!automatic) {
     const format = String(encoderOptions.format ?? "full");
     try {
@@ -2506,6 +2674,50 @@ function renderCodablockEF(
   raster: MonochromeRaster;
   display: string;
 } {
+  const requestedColumns = Math.trunc(
+    Number(field.encoderOptions.columns ?? 8)
+  );
+  if (
+    field.encoderOptions.zplColumnsSpecified === true &&
+    requestedColumns >= field.data.length
+  ) {
+    const encoded = encodeCode128Raster(
+      field.encoderOptions.zplMode === "E" ? `>8${field.data}` : field.data,
+      "N",
+      false
+    );
+    const moduleWidth = field.moduleWidth;
+    const rowHeight = Math.max(
+      moduleWidth * 2,
+      Math.trunc(Number(field.encoderOptions.rowheight ?? 8))
+    );
+    const separatorHeight = moduleWidth;
+    const barHeight = Math.max(1, rowHeight - separatorHeight);
+    const raster = allocate(
+      encoded.bits.length * moduleWidth,
+      separatorHeight + barHeight + separatorHeight
+    );
+    fillRect(raster, 0, 0, raster.width, separatorHeight);
+    for (let index = 0; index < encoded.bits.length; index++) {
+      if (encoded.bits[index] === "1") {
+        fillRect(
+          raster,
+          index * moduleWidth,
+          separatorHeight,
+          moduleWidth,
+          barHeight
+        );
+      }
+    }
+    fillRect(
+      raster,
+      0,
+      separatorHeight + barHeight,
+      raster.width,
+      separatorHeight
+    );
+    return { raster, display: "" };
+  }
   const config = barcodeOptions(field);
   const encoderOptions = Object.fromEntries(
     Object.entries(config.options).filter(
@@ -2891,7 +3103,7 @@ function rawBarcodeRaster(
   if (field.symbology === "B5") {
     return {
       raster: renderPostalBarcode(field, true, allocate),
-      display: "",
+      display: field.data,
     };
   }
   if (
@@ -2904,7 +3116,7 @@ function rawBarcodeRaster(
         Number(field.encoderOptions.zplPostalType ?? 0) === 1,
         allocate
       ),
-      display: "",
+      display: field.data,
     };
   }
   if (
@@ -3022,6 +3234,9 @@ function rawBarcodeRaster(
     return { raster, display };
   }
   if (field.symbology === "BB") {
+    if (!["A", "E", "F"].includes(String(field.encoderOptions.zplMode))) {
+      return { raster: allocate(0, 0), display: "" };
+    }
     return field.encoderOptions.zplMode === "A"
       ? renderCodablockA(field, allocate)
       : renderCodablockEF(field, allocate);
@@ -3035,21 +3250,13 @@ function rawBarcodeRaster(
     return renderAztec(field, allocate);
   }
   if (field.symbology === "BQ") {
-    const oversizedMagnification = field.magnification > 10;
     const symbol =
       field.model === "1"
         ? encodeLegacyQrModel1(field)
-        : oversizedMagnification
-        ? encodeQrModel2WithMask(field, field.mask)
-        : encodeQrModel2(field);
+        : encodeQrModel2WithMask(field, field.mask);
     // The pinned Zebra preview device caps the effective module
-    // magnification at ten even though ^BQ accepts values through 100. Its
-    // oversized path also honors the requested mask and retains the firmware's
-    // vertical origin offset.
+    // magnification at ten even though ^BQ accepts values through 100.
     const magnification = Math.min(10, field.magnification);
-    const topPadding = oversizedMagnification
-      ? Math.max(0, field.magnification - magnification - 1)
-      : 0;
     const modules = allocate(symbol.size, symbol.size);
     for (let y = 0; y < symbol.size; y++) {
       for (let x = 0; x < symbol.size; x++) {
@@ -3058,9 +3265,9 @@ function rawBarcodeRaster(
     }
     const raster = allocate(
       symbol.size * magnification,
-      topPadding + symbol.size * magnification
+      symbol.size * magnification
     );
-    blitRaster(raster, modules, 0, topPadding, {
+    blitRaster(raster, modules, 0, 0, {
       scaleX: magnification,
       scaleY: magnification,
     });
@@ -3197,14 +3404,47 @@ async function addInterpretation(
   allocate: RasterAllocator,
   bitmapFonts?: ReadonlyMap<string, DownloadedBitmapFont>,
   fontLinks?: ReadonlyMap<string, readonly string[]>
-): Promise<{ raster: MonochromeRaster; substituted: boolean }> {
+): Promise<{
+  raster: MonochromeRaster;
+  substituted: boolean;
+  offsetX: number;
+  offsetY: number;
+}> {
   if (
     display.length === 0 ||
     (!field.printInterpretationAbove && !field.printInterpretationBelow)
   ) {
-    return { raster: bars, substituted: false };
+    return {
+      raster: bars,
+      substituted: false,
+      offsetX: 0,
+      offsetY: 0,
+    };
   }
-  const font = field.interpretationFont;
+  const usesDownloadedFont = field.interpretationFont.name !== undefined;
+  const usesCode128ModeDFont =
+    !usesDownloadedFont &&
+    field.symbology === "BC" &&
+    field.mode === "D";
+  // The built-in interpretation line is a doubled fixed bitmap face,
+  // independent of ^CF. Spleen is the bundled open-source 5x8 source; these
+  // dimensions reproduce the resident 12-dot cell and 14-dot ink height.
+  // An explicitly selected downloaded font remains authoritative.
+  const font: LayoutFont = usesDownloadedFont
+    ? field.interpretationFont
+    : usesCode128ModeDFont
+    ? {
+        key: "0",
+        width: 52,
+        height: 55,
+        orientation: "N",
+      }
+    : {
+        key: "D",
+        width: 10,
+        height: 19,
+        orientation: "N",
+      };
   const glyphs: MonochromeRaster[] = [];
   let substituted = false;
   let textWidth = 0;
@@ -3221,16 +3461,26 @@ async function addInterpretation(
     substituted ||= resolved.substituted;
     textWidth += resolved.raster.width;
   }
-  const margin = Math.max(1, field.moduleWidth * 2);
-  const band = font.height + margin;
+  const customGap = Math.max(1, field.moduleWidth * 2);
+  const aboveGap = usesDownloadedFont ? customGap : 10;
+  const belowGap = usesDownloadedFont
+    ? customGap
+    : usesCode128ModeDFont
+    ? 5
+    : 3;
+  const aboveBand = field.printInterpretationAbove
+    ? font.height + aboveGap
+    : 0;
+  const belowBand = field.printInterpretationBelow
+    ? font.height + belowGap
+    : 0;
+  const barsX = Math.max(0, Math.floor((textWidth - bars.width) / 2));
   const output = allocate(
     Math.max(bars.width, textWidth),
-    bars.height +
-      (field.printInterpretationAbove ? band : 0) +
-      (field.printInterpretationBelow ? band : 0)
+    bars.height + aboveBand + belowBand
   );
-  const barsY = field.printInterpretationAbove ? band : 0;
-  blitRaster(output, bars, Math.floor((output.width - bars.width) / 2), barsY);
+  const barsY = aboveBand;
+  blitRaster(output, bars, barsX, barsY);
   const drawText = (y: number) => {
     let x = Math.floor((output.width - textWidth) / 2);
     for (const glyph of glyphs) {
@@ -3239,8 +3489,27 @@ async function addInterpretation(
     }
   };
   if (field.printInterpretationAbove) drawText(0);
-  if (field.printInterpretationBelow) drawText(barsY + bars.height + margin);
-  return { raster: output, substituted };
+  if (field.printInterpretationBelow) {
+    drawText(barsY + bars.height + belowGap);
+  }
+  let orientedBarsX = barsX;
+  let orientedBarsY = barsY;
+  if (field.orientation === "R") {
+    orientedBarsX = output.height - barsY - bars.height;
+    orientedBarsY = barsX;
+  } else if (field.orientation === "I") {
+    orientedBarsX = output.width - barsX - bars.width;
+    orientedBarsY = output.height - barsY - bars.height;
+  } else if (field.orientation === "B") {
+    orientedBarsX = barsY;
+    orientedBarsY = output.width - barsX - bars.width;
+  }
+  return {
+    raster: output,
+    substituted,
+    offsetX: -orientedBarsX,
+    offsetY: -orientedBarsY,
+  };
 }
 
 function validationErrorCode(error: unknown): "C" | "E" | "L" | "S" | "P" {
@@ -3373,15 +3642,26 @@ export async function renderLayoutToRaster(
           field.kind === "circle" ? field.diameter : field.width;
         const ellipseHeight =
           field.kind === "circle" ? field.diameter : field.height;
-        strokeEllipse(
-          raster,
-          field.x,
-          field.y,
-          ellipseWidth,
-          ellipseHeight,
-          field.thickness,
-          operation(field.reverse, field.color)
-        );
+        if (field.kind === "circle") {
+          strokeCircle(
+            raster,
+            field.x,
+            field.y,
+            field.diameter,
+            field.thickness,
+            operation(field.reverse, field.color)
+          );
+        } else {
+          strokeEllipse(
+            raster,
+            field.x,
+            field.y,
+            field.width,
+            field.height,
+            field.thickness,
+            operation(field.reverse, field.color)
+          );
+        }
         highlightRegions.push(
           field.kind === "circle"
             ? {
@@ -3531,21 +3811,50 @@ export async function renderLayoutToRaster(
             labelIndex,
           });
         }
+        let barcodeX = field.x + interpreted.offsetX;
+        let barcodeY = field.y + interpreted.offsetY;
+        let barcodeOrientation = field.orientation;
+        if (field.symbology === "BQ") {
+          // The printer keeps QR modules upright. Orientation selects one corner
+          // of the square inherited from ^BY height instead of rotating the
+          // symbol itself.
+          const anchorOffset = Math.max(0, field.height - 1);
+          if (field.orientation === "N" || field.orientation === "I") {
+            barcodeY += anchorOffset;
+          }
+          if (field.orientation === "B" || field.orientation === "I") {
+            barcodeX += anchorOffset;
+          }
+          barcodeOrientation = "N";
+        } else if (
+          field.orientation === "B" &&
+          (field.symbology === "B5" || field.symbology === "BZ")
+        ) {
+          // The postal firmware path has a three-dot bottom-up anchor bias.
+          barcodeY += 3;
+        } else if (field.orientation === "B" && field.symbology === "BR") {
+          // GS1 DataBar uses the adjacent firmware raster path and lands one
+          // dot above the generic bottom-up transform.
+          barcodeY -= 1;
+        } else if (field.symbology === "BD") {
+          // MaxiCode's fixed hex grid starts one dot to the right of ^FO.
+          barcodeX += 1;
+        }
         const size = blitRaster(
           raster,
           interpreted.raster,
-          field.x,
-          field.y,
+          barcodeX,
+          barcodeY,
           {
-            orientation: field.orientation,
+            orientation: barcodeOrientation,
             operation: operation(field.reverse),
           }
         );
         highlightRegions.push({
           type: "barcode",
           sourceSpan: field.sourceSpan,
-          x: field.x,
-          y: field.y,
+          x: barcodeX,
+          y: barcodeY,
           ...size,
         });
       }
