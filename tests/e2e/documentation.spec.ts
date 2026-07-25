@@ -8,6 +8,21 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("uses the full site toolbar on command pages", async ({ page }) => {
+  for (const path of ["/", "/zpl-commands", "/zpl-commands/caret-fo"]) {
+    await page.goto(path);
+    const navigation = page.getByRole("navigation", { name: "Primary navigation" });
+    await expect(navigation).toBeVisible();
+    await expect(navigation.getByText("Label systems", { exact: true })).toBeVisible();
+    await expect(navigation.getByRole("link", { name: "Workflow" })).toHaveAttribute("href", "/#features");
+    await expect(navigation.getByRole("link", { name: "Designer" })).toHaveAttribute("href", "/#designer");
+    await expect(navigation.getByRole("link", { name: "Library" })).toHaveAttribute("href", "/#library");
+    await expect(navigation.getByRole("link", { name: "Commands" })).toHaveAttribute("href", "/zpl-commands");
+    await expect(navigation.getByRole("link", { name: "GitHub" })).toBeVisible();
+    await expect(navigation.getByRole("link", { name: "Open Editor" })).toHaveAttribute("href", "/editor");
+  }
+});
+
 test("browses and filters the complete command catalog", async ({ page }) => {
   const browserErrors: string[] = [];
   page.on("console", (message) => {

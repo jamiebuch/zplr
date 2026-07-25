@@ -3,7 +3,7 @@
     <a href="#command-content" class="sr-only z-50 rounded-md bg-white px-4 py-2 text-zinc-950 shadow-lg focus:not-sr-only focus:fixed focus:top-3 focus:left-3">
       Skip to command documentation
     </a>
-    <DocumentationHeader />
+    <SiteHeader />
 
     <main id="command-content">
       <div class="border-b border-zinc-200 bg-zinc-50/75 dark:border-white/10 dark:bg-zinc-900/35">

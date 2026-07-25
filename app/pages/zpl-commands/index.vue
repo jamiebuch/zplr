@@ -3,7 +3,7 @@
     <a href="#command-index" class="sr-only z-50 rounded-md bg-white px-4 py-2 text-zinc-950 shadow-lg focus:not-sr-only focus:fixed focus:top-3 focus:left-3">
       Skip to command index
     </a>
-    <DocumentationHeader />
+    <SiteHeader />
 
     <main id="command-index">
       <section class="docs-hero border-b border-zinc-200 dark:border-white/10">

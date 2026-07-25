@@ -7,39 +7,7 @@
       Skip to content
     </a>
 
-    <header class="landing-header sticky top-0 z-40">
-      <nav class="mx-auto flex h-16 max-w-[90rem] items-center gap-6 px-5 sm:px-7 lg:px-10" aria-label="Primary navigation">
-        <NuxtLink to="/" class="landing-wordmark flex shrink-0 items-center gap-2.5" aria-label="ZPLr home">
-          <img :src="logoUrl" class="h-8 w-auto dark:invert" alt="" />
-          <span class="text-sm font-black tracking-[-0.04em]">ZPLr</span>
-          <span class="hidden font-mono text-[9px] tracking-[0.14em] text-zinc-600 uppercase sm:inline dark:text-zinc-400">Label systems</span>
-        </NuxtLink>
-        <div class="mx-auto hidden items-center gap-7 text-xs font-extrabold tracking-[0.08em] uppercase md:flex">
-          <a href="#features" class="landing-nav-link">Workflow</a>
-          <a href="#designer" class="landing-nav-link">Designer</a>
-          <a href="#library" class="landing-nav-link">Library</a>
-          <NuxtLink to="/zpl-commands" class="landing-nav-link">Commands</NuxtLink>
-        </div>
-        <div class="ml-auto flex items-center gap-2">
-          <a
-            href="https://github.com/le2ni/zplr"
-            target="_blank"
-            rel="noreferrer"
-            class="landing-header-link hidden h-9 items-center gap-2 px-3 text-sm font-bold sm:inline-flex"
-          >
-            <IconGithub class="size-4" aria-hidden="true" />
-            GitHub
-          </a>
-          <NuxtLink
-            to="/editor"
-            class="landing-header-cta inline-flex h-9 items-center px-3.5 text-sm font-black"
-          >
-            Open Editor
-            <IconArrowRight class="ml-1.5 size-4" aria-hidden="true" />
-          </NuxtLink>
-        </div>
-      </nav>
-    </header>
+    <SiteHeader />
 
     <main id="main-content">
       <section class="landing-hero relative isolate">
@@ -508,7 +476,6 @@ import {
   IconDatabaseOutline,
   IconEyeOutline,
   IconFileDocumentOutline,
-  IconGithub,
   IconImageOutline,
   IconOpenInNew,
   IconPackageVariantClosed,
@@ -877,67 +844,6 @@ useHead({
     "Segoe UI", sans-serif;
 }
 
-.landing-header {
-  border-bottom: 2px solid var(--landing-ink);
-  background: rgb(244 241 231 / 0.92);
-  backdrop-filter: blur(16px);
-}
-
-.landing-wordmark > span:last-child {
-  border-left: 1px solid var(--landing-rule);
-  padding-left: 0.65rem;
-}
-
-.landing-nav-link {
-  position: relative;
-}
-
-.landing-nav-link::after {
-  position: absolute;
-  right: 0;
-  bottom: -0.35rem;
-  left: 0;
-  height: 2px;
-  background: var(--landing-ink);
-  content: "";
-  transform: scaleX(0);
-  transform-origin: right;
-  transition: transform 180ms ease;
-}
-
-.landing-nav-link:hover::after {
-  transform: scaleX(1);
-  transform-origin: left;
-}
-
-.landing-header-link {
-  color: var(--landing-muted);
-  transition:
-    color 150ms ease,
-    background-color 150ms ease;
-}
-
-.landing-header-link:hover {
-  background: rgb(20 20 20 / 0.07);
-  color: var(--landing-ink);
-}
-
-.landing-header-cta {
-  border: 2px solid var(--landing-ink);
-  background: var(--landing-ink);
-  color: white;
-  transition:
-    background-color 150ms ease,
-    color 150ms ease,
-    transform 150ms ease;
-}
-
-.landing-header-cta:hover {
-  background: var(--landing-sheet);
-  color: var(--landing-ink);
-  transform: translateY(-1px);
-}
-
 .landing-hero {
   border-bottom: 2px solid var(--landing-ink);
   background-color: var(--landing-paper);
@@ -1028,8 +934,7 @@ useHead({
 }
 
 .landing-primary-cta:focus-visible,
-.landing-secondary-cta:focus-visible,
-.landing-header-cta:focus-visible {
+.landing-secondary-cta:focus-visible {
   outline: 3px solid var(--landing-accent);
   outline-offset: 3px;
 }
@@ -1751,24 +1656,6 @@ useHead({
     --landing-accent: rgb(205 103 91);
   }
 
-  .landing-header {
-    background: rgb(15 15 17 / 0.92);
-  }
-
-  .landing-header-link:hover {
-    background: rgb(255 255 255 / 0.08);
-  }
-
-  .landing-header-cta {
-    background: var(--landing-ink);
-    color: rgb(20 20 20);
-  }
-
-  .landing-header-cta:hover {
-    background: var(--landing-sheet);
-    color: var(--landing-ink);
-  }
-
   .landing-hero {
     background-image:
       linear-gradient(90deg, transparent 50%, rgb(255 255 255 / 0.06) 50%, rgb(255 255 255 / 0.06) calc(50% + 1px), transparent calc(50% + 1px)),
@@ -1923,12 +1810,6 @@ useHead({
   font-family: inherit;
 }
 
-.landing-header {
-  border-bottom: 1px solid var(--landing-rule);
-  background: rgb(255 255 255 / 0.92);
-}
-
-.landing-header-cta,
 .landing-primary-cta,
 .landing-secondary-cta {
   border-width: 1px;
@@ -1936,16 +1817,10 @@ useHead({
   box-shadow: none;
 }
 
-.landing-header-cta:hover,
 .landing-primary-cta:hover,
 .landing-secondary-cta:hover {
   box-shadow: none;
   transform: translateY(-1px);
-}
-
-.landing-header-cta:hover {
-  background: rgb(39 39 42);
-  color: white;
 }
 
 .landing-secondary-cta:hover {
@@ -2210,15 +2085,6 @@ useHead({
     --landing-muted: rgb(161 161 170);
     --landing-rule: rgb(255 255 255 / 0.1);
     --landing-accent: rgb(96 165 250);
-  }
-
-  .landing-header {
-    background: rgb(9 9 11 / 0.92);
-  }
-
-  .landing-header-cta:hover {
-    background: rgb(228 228 231);
-    color: rgb(24 24 27);
   }
 
   .landing-hero,
