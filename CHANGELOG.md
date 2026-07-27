@@ -2,7 +2,7 @@
 
 All notable changes follow Keep a Changelog. ZPLr uses semantic versioning from 0.3.0 onward.
 
-## [0.3.0] - Unreleased
+## [0.3.0] - 2026-07-27
 
 ### Added
 
