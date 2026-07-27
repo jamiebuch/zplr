@@ -33,7 +33,10 @@ test("browses and filters the complete command catalog", async ({ page }) => {
   await page.goto("/zpl-commands");
   await expect(page.getByRole("heading", { name: "Every ZPL command, explained and ready to render." })).toBeVisible();
   await expect(page.locator(".command-card")).toHaveCount(60);
-  await expect(page.getByText("1,457", { exact: true })).toBeVisible();
+  await expect(page.getByAltText("Rendered sample for ^A Scalable/Bitmapped Font")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByText("1,552", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Show all 223 commands" }).click();
   await expect(page.locator(".command-card")).toHaveCount(223);
 
@@ -58,12 +61,15 @@ test("renders visual examples lazily and keeps device commands code-only", async
   await page.goto("/zpl-commands/caret-fo");
   await expect(page.getByRole("heading", { name: "Field Origin" })).toBeVisible();
   await expect(page.getByText("^FOx,y,z", { exact: true })).toBeVisible();
+  await expect(
+    page.getByAltText("Representative rendered sample for ^FO Field Origin"),
+  ).toBeVisible({ timeout: 30_000 });
   const firstComparison = page.locator(".example-comparison").first();
   await firstComparison.scrollIntoViewIfNeeded();
   await expect(firstComparison.getByText("Side-by-side comparison", { exact: true })).toBeVisible();
   const variations = firstComparison.locator(".example-variation");
-  await expect(variations).toHaveCount(2);
-  await expect(firstComparison.getByText("Renderer", { exact: true })).toHaveCount(2);
+  await expect(variations).toHaveCount(3);
+  await expect(firstComparison.getByText("Renderer", { exact: true })).toHaveCount(3);
   const variationLayout = await variations.evaluateAll(([first, second]) => {
     const firstBounds = first!.getBoundingClientRect();
     const secondBounds = second!.getBoundingClientRect();
@@ -80,9 +86,28 @@ test("renders visual examples lazily and keeps device commands code-only", async
     /\/editor\?example=caret-fo-/,
   );
 
+  await page.goto("/zpl-commands/caret-b0");
+  await expect(page.getByRole("heading", { name: "Aztec Barcode Parameters" })).toBeVisible();
+  const barcodeComparison = page.locator(".example-comparison").first();
+  await barcodeComparison.scrollIntoViewIfNeeded();
+  await expect(barcodeComparison.getByText("Renderer", { exact: true })).toHaveCount(3);
+  await expect(barcodeComparison.locator("img")).toHaveCount(3, { timeout: 30_000 });
+  await expect(barcodeComparison.locator("img").first()).toBeVisible();
+  const barcodeSources = await barcodeComparison.locator("pre").allTextContents();
+  expect(barcodeSources).toHaveLength(3);
+  expect(barcodeSources.every((source) =>
+    source.includes("^XA") &&
+    source.includes("^FDHELLO AZTEC^FS") &&
+    source.includes("^XZ")
+  )).toBe(true);
+
   await page.goto("/zpl-commands/caret-rw");
   await expect(page.getByRole("heading", { name: "Set RF Power Levels for Read and Write" })).toBeVisible();
   await expect(page.getByText(/These are code examples only/)).toBeVisible();
+  await expect(page.getByText("Renderer", { exact: true })).toHaveCount(0);
+
+  await page.goto("/zpl-commands/caret-cc");
+  await expect(page.getByText(/does not produce a standalone label image/)).toBeVisible();
   await expect(page.getByText("Renderer", { exact: true })).toHaveCount(0);
 
   await page.goto("/zpl-commands/caret-jm");
@@ -126,9 +151,9 @@ test("opens a documentation example in a new editor workspace tab", async ({ pag
   await page.goto("/zpl-commands/caret-fo");
   await page.getByRole("link", { name: /Edit in editor/ }).first().click();
   await expect(page).toHaveURL(/\/editor$/);
-  await expect(page.getByText(/\^FO example opened as caret-fo-x-1\.zpl/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/\^FO example opened as caret-fo-recommended\.zpl/)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("shipping-label.zpl", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("caret-fo-x-1.zpl", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("caret-fo-recommended.zpl", { exact: true }).first()).toBeVisible();
   await expect(page.locator(".editor-tab")).toHaveCount(2);
 });
 
@@ -157,7 +182,7 @@ test("keeps command documentation usable on a narrow dark viewport", async ({ br
   await page.goto("/zpl-commands/caret-fo");
   await expect(page.getByRole("heading", { name: "Field Origin" })).toBeVisible();
   await page.locator(".example-card").first().scrollIntoViewIfNeeded();
-  await expect(page.getByAltText(/Rendered label for \^FO/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByAltText(/Representative rendered sample for \^FO/)).toBeVisible({ timeout: 30_000 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(consoleErrors).toEqual([]);
   await context.close();

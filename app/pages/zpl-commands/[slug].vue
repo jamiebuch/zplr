@@ -47,13 +47,63 @@
 
             <div v-if="!hasPreviews" class="code-only-notice">
               <IconCodeTags class="size-5 shrink-0" aria-hidden="true" />
-              <p>
-                These are code examples only. {{ guide.status === "unsupported"
-                  ? "This command is recognized but not implemented by the local renderer."
-                  : "This printer or device command does not change label pixels." }}
-              </p>
+              <p>These are code examples only. {{ codeOnlyExplanation }}</p>
             </div>
           </header>
+
+          <section
+            v-if="guide.featuredExample"
+            id="rendered-sample"
+            class="signature-section featured-sample-section scroll-mt-24"
+          >
+            <div class="section-eyebrow">Rendered sample</div>
+            <div class="featured-sample-heading">
+              <h2>A representative output</h2>
+              <p>This compact example is selected because the visible result clearly demonstrates {{ guide.canonical }}.</p>
+            </div>
+            <article class="example-card mt-5">
+              <div class="example-card-header">
+                <div>
+                  <h4>{{ guide.featuredExample.title }}</h4>
+                  <p>{{ guide.featuredExample.description }}</p>
+                </div>
+                <div class="example-actions">
+                  <button
+                    type="button"
+                    :aria-label="`Copy ${guide.featuredExample.title}`"
+                    @click="copyExample(guide.featuredExample)"
+                  >
+                    <IconCheck v-if="copiedExample === guide.featuredExample.id" class="size-4" aria-hidden="true" />
+                    <IconContentCopy v-else class="size-4" aria-hidden="true" />
+                    {{ copiedExample === guide.featuredExample.id ? "Copied" : "Copy" }}
+                  </button>
+                  <NuxtLink :to="{ path: '/editor', query: { example: guide.featuredExample.id } }">
+                    <IconPencilOutline class="size-4" aria-hidden="true" />
+                    Edit in editor
+                    <IconArrowRight class="size-3.5" aria-hidden="true" />
+                  </NuxtLink>
+                </div>
+              </div>
+              <div class="example-body">
+                <div class="code-pane">
+                  <div class="pane-label"><span>ZPL</span><span>{{ guide.featuredExample.filename }}</span></div>
+                  <pre tabindex="0"><code>{{ guide.featuredExample.source }}</code></pre>
+                </div>
+                <div class="preview-pane">
+                  <div class="pane-label"><span>Renderer</span><span>8 dpmm</span></div>
+                  <ClientOnly>
+                    <ZplMiniPreview
+                      :source="guide.featuredExample.source"
+                      :alt="`Representative rendered sample for ${guide.canonical} ${guide.title}`"
+                      compact
+                      crop
+                    />
+                    <template #fallback><div class="preview-fallback" role="status">Preview loads in your browser</div></template>
+                  </ClientOnly>
+                </div>
+              </div>
+            </article>
+          </section>
 
           <section
             v-for="(signature, signatureIndex) in guide.signatures"
@@ -246,6 +296,9 @@
         <aside class="hidden lg:block">
           <nav class="toc sticky top-24" aria-label="On this page">
             <p>On this page</p>
+            <a v-if="guide.featuredExample" href="#rendered-sample" class="signature-link">
+              Rendered sample
+            </a>
             <a v-for="(signature, index) in guide.signatures" :key="signature.id" :href="`#${signature.id}`" class="signature-link">
               Syntax{{ guide.signatures.length > 1 ? ` ${index + 1}` : "" }}
             </a>
@@ -333,10 +386,19 @@ const {
 function zplCommandRoute(candidate: Pick<AdjacentCommandGuide, "slug">): string {
   return `/zpl-commands/${candidate.slug}`;
 }
-const hasPreviews = guide.signatures.some((signature) =>
+const hasPreviews = Boolean(guide.featuredExample) || guide.signatures.some((signature) =>
   signature.examples.some(({ preview }) => preview) ||
   signature.parameters.some((parameter) => parameter.examples.some(({ preview }) => preview)),
 );
+const codeOnlyExplanation = computed(() => {
+  if (guide.status === "unsupported") {
+    return "This command is recognized but not implemented by the local renderer.";
+  }
+  if (guide.effect === "device" || guide.effect === "job") {
+    return "This printer or session command does not produce a standalone label image.";
+  }
+  return "A single rendered image would not reliably demonstrate this command, so the editable syntax examples are shown without a misleading preview.";
+});
 const copiedExample = ref<string>();
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -505,6 +567,28 @@ useHead({
 .signature-section {
   border-top: 1px solid rgb(228 228 231);
   padding: 3rem 0;
+}
+
+.featured-sample-section {
+  padding-top: 2.5rem;
+}
+
+.featured-sample-heading {
+  margin-top: 0.65rem;
+}
+
+.featured-sample-heading h2 {
+  font-size: 1.25rem;
+  font-weight: 850;
+  letter-spacing: -0.025em;
+}
+
+.featured-sample-heading p {
+  margin-top: 0.3rem;
+  max-width: 48rem;
+  color: rgb(82 82 91);
+  font-size: 0.78rem;
+  line-height: 1.35rem;
 }
 
 .section-eyebrow {
@@ -1125,6 +1209,7 @@ useHead({
 
   .parameter-heading h2,
   .examples-heading h3,
+  .featured-sample-heading h2,
   .example-card-header h4,
   .official-reference h2,
   .adjacent-navigation strong,
@@ -1135,6 +1220,7 @@ useHead({
   }
 
   .parameter-heading p,
+  .featured-sample-heading p,
   .official-reference p:not(.section-eyebrow) {
     color: rgb(161 161 170);
   }

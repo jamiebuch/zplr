@@ -2,10 +2,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { commandCapabilities } from "../src/core/capabilities";
 import { zplCommandDefinitions } from "../web/zplCommandMetadata.generated";
-import {
-  commandSlug,
-  commandSummary,
-} from "../web/zplDocumentationSummary";
 
 const target = resolve("web/zplDocumentationData.generated.ts");
 const indexTarget = resolve("public/zpl-command-index.json");
@@ -97,45 +93,40 @@ export interface ZplCommandDocumentationSeed {
 
 export const zplCommandDocumentationSeeds = ${JSON.stringify(seeds, null, 2)} as const satisfies readonly ZplCommandDocumentationSeed[];
 `;
-const indexOutput = `${JSON.stringify(seeds.map((seed) => ({
-  canonical: seed.canonical,
-  slug: commandSlug(seed.canonical),
-  title: seed.title,
-  summary: commandSummary(seed),
-  category: seed.category,
-  effect: seed.effect,
-  scope: seed.scope,
-  status: seed.status,
-  parameterTerms: seed.signatures.flatMap((signature) =>
-    signature.parameters.flatMap((parameter) => [
-      parameter.key,
-      parameter.name,
-    ]),
-  ).join(" ").toLowerCase(),
-  parameterCount: seed.signatures.reduce(
-    (total, signature) => total + signature.parameters.length,
-    0,
-  ),
-})))}\n`;
 
 if (process.argv.includes("--check")) {
   let current = "";
-  let currentIndex = "";
   try {
     current = readFileSync(target, "utf8");
   } catch {
     // A missing generated file is reported as the same deterministic mismatch.
   }
-  try {
-    currentIndex = readFileSync(indexTarget, "utf8");
-  } catch {
-    // A missing generated file is reported as the same deterministic mismatch.
-  }
-  if (current !== output || currentIndex !== indexOutput) {
+  if (current !== output) {
     console.error("Generated command documentation is stale. Run pnpm docs:commands.");
     process.exitCode = 1;
+  } else {
+    const {
+      zplCommandGuides,
+      zplCommandIndexEntry,
+    } = await import("../web/zplDocumentation");
+    const indexOutput = `${JSON.stringify(zplCommandGuides.map(zplCommandIndexEntry))}\n`;
+    let currentIndex = "";
+    try {
+      currentIndex = readFileSync(indexTarget, "utf8");
+    } catch {
+      // A missing generated file is reported as the same deterministic mismatch.
+    }
+    if (currentIndex !== indexOutput) {
+      console.error("Generated command documentation is stale. Run pnpm docs:commands.");
+      process.exitCode = 1;
+    }
   }
 } else {
   writeFileSync(target, output);
+  const {
+    zplCommandGuides,
+    zplCommandIndexEntry,
+  } = await import("../web/zplDocumentation");
+  const indexOutput = `${JSON.stringify(zplCommandGuides.map(zplCommandIndexEntry))}\n`;
   writeFileSync(indexTarget, indexOutput);
 }

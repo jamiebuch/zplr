@@ -108,6 +108,19 @@
             </div>
             <h2>{{ guide.title }}</h2>
             <p>{{ guide.summary }}</p>
+            <div v-if="guide.previewSource" class="command-sample">
+              <span class="sr-only">Sample output rendered at 8 dpmm</span>
+              <ClientOnly>
+                <ZplMiniPreview
+                  :source="guide.previewSource"
+                  :alt="`Rendered sample for ${guide.canonical} ${guide.title}`"
+                  thumbnail
+                />
+                <template #fallback>
+                  <div class="command-sample-fallback" role="status">Preview loads in your browser</div>
+                </template>
+              </ClientOnly>
+            </div>
             <div class="mt-auto flex items-center justify-between border-t border-zinc-200/80 pt-4 text-[10px] font-bold tracking-[0.06em] text-zinc-500 uppercase dark:border-white/10">
               <span>{{ guide.category }} · {{ guide.effect }}</span>
               <span class="inline-flex items-center gap-1 text-zinc-900 transition group-hover:translate-x-0.5 dark:text-white">
@@ -152,15 +165,7 @@ import type {
   CommandCategory,
   CommandEffect,
 } from "../../../src/types/ZplDocument";
-import type { ZplCommandGuide } from "../../../web/zplDocumentation";
-
-interface CommandIndexGuide extends Pick<
-  ZplCommandGuide,
-  "canonical" | "slug" | "title" | "summary" | "category" | "effect" | "scope" | "status"
-> {
-  parameterTerms: string;
-  parameterCount: number;
-}
+import type { ZplCommandIndexGuide } from "../../../web/zplDocumentation";
 
 interface CommandIndexPayload {
   coverage: {
@@ -172,7 +177,7 @@ interface CommandIndexPayload {
   };
   initialCommandLimit: number;
   categories: CommandCategory[];
-  guides: CommandIndexGuide[];
+  guides: ZplCommandIndexGuide[];
 }
 
 const { data: documentation, error: documentationError } = await useFetch<CommandIndexPayload>(
@@ -193,7 +198,7 @@ const catalogLoading = ref(false);
 const catalogLoadError = ref(false);
 let catalogRequest: Promise<void> | undefined;
 
-function zplCommandRoute(guide: Pick<CommandIndexGuide, "slug">): string {
+function zplCommandRoute(guide: Pick<ZplCommandIndexGuide, "slug">): string {
   return `/zpl-commands/${guide.slug}`;
 }
 
@@ -245,7 +250,7 @@ async function ensureAllCommands(): Promise<void> {
 
   catalogLoading.value = true;
   catalogLoadError.value = false;
-  catalogRequest = $fetch<CommandIndexGuide[]>("/zpl-command-index.json")
+  catalogRequest = $fetch<ZplCommandIndexGuide[]>("/zpl-command-index.json")
     .then((guides) => {
       if (!Array.isArray(guides) || guides.length !== coverage.commands) {
         throw new Error("The generated command index is incomplete.");
@@ -284,11 +289,11 @@ function titleCase(value: string): string {
   return value[0]!.toUpperCase() + value.slice(1);
 }
 
-function statusLabel(value: CommandIndexGuide["status"]): string {
+function statusLabel(value: ZplCommandIndexGuide["status"]): string {
   return value === "non-rendering" ? "Device only" : titleCase(value);
 }
 
-function parameterCount(guide: CommandIndexGuide): number {
+function parameterCount(guide: ZplCommandIndexGuide): number {
   return guide.parameterCount;
 }
 
@@ -555,10 +560,26 @@ useHead({
 }
 
 .command-card > p {
-  margin: 0.55rem 0 1.2rem;
+  margin: 0.55rem 0 0.9rem;
   color: rgb(82 82 91);
   font-size: 0.75rem;
   line-height: 1.35rem;
+}
+
+.command-sample {
+  overflow: hidden;
+  margin-bottom: 1rem;
+  border: 1px solid rgb(228 228 231);
+  border-radius: 0.65rem;
+  background: rgb(250 250 250);
+}
+
+.command-sample-fallback {
+  display: grid;
+  min-height: 4.5rem;
+  place-items: center;
+  color: rgb(113 113 122);
+  font-size: 0.65rem;
 }
 
 .show-all-row {
@@ -723,6 +744,11 @@ useHead({
 
   .command-card > p {
     color: rgb(161 161 170);
+  }
+
+  .command-sample {
+    border-color: rgb(255 255 255 / 0.1);
+    background: rgb(24 24 27);
   }
 
   .status-supported { background: rgb(20 83 45 / 0.5); color: rgb(134 239 172); }

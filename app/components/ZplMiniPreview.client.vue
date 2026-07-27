@@ -1,8 +1,8 @@
 <template>
-  <div ref="root" class="mini-preview" :class="{ compact }" :aria-busy="state === 'loading'">
+  <div ref="root" class="mini-preview" :class="{ compact, thumbnail, cropped: crop }" :aria-busy="state === 'loading'">
     <div v-if="state === 'idle' || state === 'loading'" class="mini-preview-state" role="status">
       <span class="preview-spinner" aria-hidden="true"></span>
-      {{ state === "idle" ? "Preview queued" : "Rendering locally…" }}
+      {{ state === "idle" ? (thumbnail ? "Sample queued" : "Preview queued") : (thumbnail ? "Rendering sample…" : "Rendering locally…") }}
     </div>
 
     <img
@@ -28,11 +28,14 @@
 
 <script setup lang="ts">
 import { IconAlertCircleOutline } from "@iconify-prerendered/vue-mdi";
+import { previewInkBounds } from "../../web/zplPreviewThumbnail";
 
 const props = defineProps<{
   source: string;
   alt: string;
   compact?: boolean;
+  thumbnail?: boolean;
+  crop?: boolean;
 }>();
 
 interface PreviewResult {
@@ -54,11 +57,39 @@ const height = ref<number>();
 const labelCount = ref(0);
 const diagnosticCount = ref(0);
 const dimensions = computed(() =>
-  width.value && height.value ? `${width.value} × ${height.value} dots` : "Label preview",
+  width.value && height.value
+    ? `${width.value} × ${height.value} dots${props.crop ? " · cropped to ink" : ""}`
+    : "Label preview",
 );
 let observer: IntersectionObserver | undefined;
 
-async function createPreview(source: string): Promise<PreviewResult> {
+function thumbnailUrl(canvas: HTMLCanvasElement): string {
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return canvas.toDataURL("image/png");
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+  const crop = previewInkBounds(pixels.data, canvas.width, canvas.height);
+  if (!crop) return canvas.toDataURL("image/png");
+
+  const thumbnail = document.createElement("canvas");
+  thumbnail.width = crop.width;
+  thumbnail.height = crop.height;
+  const thumbnailContext = thumbnail.getContext("2d");
+  if (!thumbnailContext) return canvas.toDataURL("image/png");
+  thumbnailContext.drawImage(
+    canvas,
+    crop.x,
+    crop.y,
+    crop.width,
+    crop.height,
+    0,
+    0,
+    crop.width,
+    crop.height,
+  );
+  return thumbnail.toDataURL("image/png");
+}
+
+async function createPreview(source: string, crop: boolean): Promise<PreviewResult> {
   try {
     const { renderZpl } = await import("../../src/index.web");
     const result = await renderZpl(source, {
@@ -83,7 +114,7 @@ async function createPreview(source: string): Promise<PreviewResult> {
       };
     }
     return {
-      imageUrl: label.canvas.toDataURL("image/png"),
+      imageUrl: crop ? thumbnailUrl(label.canvas) : label.canvas.toDataURL("image/png"),
       width: label.width,
       height: label.height,
       labelCount: result.labels.length,
@@ -101,10 +132,12 @@ async function createPreview(source: string): Promise<PreviewResult> {
 async function renderPreview(): Promise<void> {
   if (state.value !== "idle") return;
   state.value = "loading";
-  let request = previewCache.get(props.source);
+  const crop = Boolean(props.thumbnail || props.crop);
+  const cacheKey = `${crop ? "cropped" : "full"}:${props.source}`;
+  let request = previewCache.get(cacheKey);
   if (!request) {
-    request = createPreview(props.source);
-    previewCache.set(props.source, request);
+    request = createPreview(props.source, crop);
+    previewCache.set(cacheKey, request);
   }
   const result = await request;
   imageUrl.value = result.imageUrl;
@@ -178,6 +211,32 @@ onBeforeUnmount(() => observer?.disconnect());
   padding: 1rem;
 }
 
+.mini-preview.cropped .mini-preview-image {
+  width: 100%;
+}
+
+.mini-preview.thumbnail {
+  height: 4.5rem;
+  min-height: 4.5rem;
+  background: rgb(250 250 250);
+}
+
+.mini-preview.thumbnail .mini-preview-image {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  padding: 0.375rem 0.6rem;
+}
+
+.mini-preview.thumbnail .mini-preview-state {
+  padding: 1rem;
+  font-size: 0.65rem;
+}
+
+.mini-preview.thumbnail .preview-meta {
+  display: none;
+}
+
 .mini-preview-state {
   margin: auto;
   display: flex;
@@ -231,6 +290,10 @@ onBeforeUnmount(() => observer?.disconnect());
     background-color: rgb(24 24 27);
     background-position: 0 0, 0 8px, 8px -8px, -8px 0;
     background-size: 16px 16px;
+  }
+
+  .mini-preview.thumbnail {
+    background: rgb(24 24 27);
   }
 
   .preview-meta {
