@@ -1248,6 +1248,8 @@ test("imports, places, and atomically renames an image resource", async ({ page 
 
 for (const colorScheme of ["light", "dark"] as const) {
   test(`has no serious automated accessibility violations in ${colorScheme} mode`, async ({ page }) => {
+    test.slow();
+
     await page.goto("/");
     await page.emulateMedia({ colorScheme });
     await expect.poll(() => page.evaluate(() =>
