@@ -81,4 +81,16 @@ export default defineNuxtConfig({
       chunkSizeWarningLimit: 2_000,
     },
   },
+  hooks: {
+    "build:manifest": (manifest) => {
+      // The homepage viewer loads the renderer after user interaction. Leaving
+      // this dynamic edge in the SSR manifest emits a 500+ kB prefetch hint and
+      // competes with the landing page's critical requests.
+      const homepage = Object.values(manifest).find(({ src }) => src === "pages/index.vue");
+      if (!homepage?.dynamicImports) return;
+      homepage.dynamicImports = homepage.dynamicImports.filter(
+        (id) => manifest[id]?.name !== "index.web",
+      );
+    },
+  },
 });

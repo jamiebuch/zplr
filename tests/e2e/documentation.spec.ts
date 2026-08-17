@@ -33,6 +33,11 @@ test("browses and filters the complete command catalog", async ({ page }) => {
   await page.goto("/zpl-commands");
   await expect(page.getByRole("heading", { name: "Every ZPL command, explained and ready to render." })).toBeVisible();
   await expect(page.locator(".command-card")).toHaveCount(60);
+  await expect(page.locator(".command-directory-grid a")).toHaveCount(223);
+  const directoryRoutes = await page.locator(".command-directory-grid a").evaluateAll((links) =>
+    links.map((link) => (link as HTMLAnchorElement).getAttribute("href")),
+  );
+  expect(new Set(directoryRoutes).size).toBe(223);
   await expect(page.getByAltText("Rendered sample for ^A Scalable/Bitmapped Font")).toBeVisible({
     timeout: 30_000,
   });
@@ -83,7 +88,7 @@ test("renders visual examples lazily and keeps device commands code-only", async
   await expect(firstPreview).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("link", { name: /Edit in editor/ }).first()).toHaveAttribute(
     "href",
-    /\/editor\?example=caret-fo-/,
+    /\/editor#example=caret-fo-/,
   );
 
   await page.goto("/zpl-commands/caret-b0");

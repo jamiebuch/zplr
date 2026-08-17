@@ -13,6 +13,9 @@ const expectedScreenshots = {
   "zpl-editor-social.png": [1200, 630],
   "zpl-editor-social-dark.png": [1200, 630],
 };
+const expectedStaticScreenshotAssets = {
+  "zpl-label-preview.png": [600, 800],
+};
 
 const [baseUrl, expectedVersion, expectedCommit] = process.argv.slice(2);
 assert.ok(baseUrl && expectedVersion && expectedCommit, "Usage: verify-deployment <url> <version> <commit>");
@@ -44,7 +47,8 @@ for (let attempt = 1; attempt <= 12; attempt++) {
     assert.match(page.headers.get("content-security-policy") ?? "", /script-src 'self' 'sha256-/);
     assert.equal(page.headers.get("x-content-type-options"), "nosniff");
     const pageHtml = await page.text();
-    assert.match(pageHtml, /Free Online ZPL Editor, Viewer &amp; Visual Designer/);
+    assert.match(pageHtml, /Free Online ZPL Viewer &amp; Editor/);
+    assert.match(pageHtml, /aria-label="Interactive ZPL viewer"/);
     assert.match(pageHtml, /rel="canonical" href="https:\/\/zplr\.de\/"/);
     assert.match(pageHtml, /application\/ld\+json/);
     assert.match(pageHtml, /Node\.js ZPL renderer/);
@@ -87,6 +91,14 @@ for (let attempt = 1; attempt <= 12; attempt++) {
       assert.equal(bytes.readUInt32BE(16), width);
       assert.equal(bytes.readUInt32BE(20), height);
       assert.equal(createHash("sha256").update(bytes).digest("hex"), fileManifest.sha256);
+    }
+    for (const [filename, [width, height]] of Object.entries(expectedStaticScreenshotAssets)) {
+      const screenshotResponse = await fetch(new URL(`/screenshots/${filename}`, baseUrl), { cache: "no-store" });
+      assert.equal(screenshotResponse.ok, true, `${filename} returned ${screenshotResponse.status}`);
+      assert.match(screenshotResponse.headers.get("content-type") ?? "", /^image\/png/);
+      const bytes = Buffer.from(await screenshotResponse.arrayBuffer());
+      assert.equal(bytes.readUInt32BE(16), width, `${filename} has unexpected width`);
+      assert.equal(bytes.readUInt32BE(20), height, `${filename} has unexpected height`);
     }
 
     const robotsResponse = await fetch(new URL("/robots.txt", baseUrl), { cache: "no-store" });

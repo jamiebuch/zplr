@@ -57,12 +57,19 @@ test("renders locally and links to the dedicated editor route", async ({ page, r
   const faviconBytes = await faviconResponse.body();
   expect({ width: faviconBytes.readUInt32BE(16), height: faviconBytes.readUInt32BE(20) })
     .toEqual({ width: 96, height: 96 });
-  await expect(page.getByRole("heading", { name: "Free Online ZPL Editor, Viewer & Visual Designer", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Free Online ZPL Viewer & Editor", exact: true })).toBeVisible();
   const heroBottom = await page.locator(".landing-hero").evaluate((hero) => hero.getBoundingClientRect().bottom);
   const viewportHeight = await page.evaluate(() => window.innerHeight);
   expect(heroBottom).toBeLessThanOrEqual(viewportHeight + 1);
   await expect(page.getByTestId("local-only-notice")).toContainText("never leave this browser");
-  await expect(page.getByAltText("ZPLr online ZPL editor showing ZPL code beside a rendered shipping label preview")).toBeVisible({ timeout: 30_000 });
+  const quickViewer = page.getByTestId("homepage-zpl-viewer");
+  await expect(quickViewer).toBeVisible();
+  const quickViewerSource = quickViewer.getByLabel("ZPL code to preview");
+  await expect(quickViewerSource).toHaveValue(/\^XA/);
+  await expect(quickViewer.getByAltText("Rendered shipping label preview from the sample ZPL code")).toBeVisible();
+  await quickViewerSource.fill("^XA\n^PW200\n^LL100\n^FO10,10^A0N,24,24^FDViewer test^FS\n^XZ");
+  await expect(quickViewer.getByAltText("Live ZPL viewer preview of the current label code")).toBeVisible({ timeout: 30_000 });
+  await expect(quickViewer).toContainText("200 × 100 dots", { timeout: 30_000 });
   for (const alt of [
     "Visual ZPL label designer with a drag-and-drop canvas, layers, guides, and field properties",
     "ZPL variable data manager previewing records imported from CSV or JSON for batch label export",
@@ -78,7 +85,6 @@ test("renders locally and links to the dedicated editor route", async ({ page, r
   }
   await page.emulateMedia({ colorScheme: "dark" });
   for (const alt of [
-    "ZPLr online ZPL editor showing ZPL code beside a rendered shipping label preview",
     "Rendered shipping label in the live ZPL preview canvas",
     "Visual ZPL label designer with a drag-and-drop canvas, layers, guides, and field properties",
     "ZPL variable data manager previewing records imported from CSV or JSON for batch label export",
@@ -90,7 +96,7 @@ test("renders locally and links to the dedicated editor route", async ({ page, r
   }
   await page.emulateMedia({ colorScheme: "light" });
 
-  const editorLink = page.getByRole("link", { name: "Open the free ZPL editor", exact: true }).first();
+  const editorLink = page.getByRole("link", { name: "Open the full ZPL editor", exact: true }).first();
   await expect(editorLink).toHaveAttribute("href", "/editor");
 
   const versionResponse = await request.get("/version.json");
@@ -1347,7 +1353,7 @@ for (const colorScheme of ["light", "dark"] as const) {
 test("remains usable at a narrow mobile viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  await expect(page.getByRole("link", { name: "Open the free ZPL editor", exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open the full ZPL editor", exact: true }).first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 
   await page.goto("/editor");

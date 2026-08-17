@@ -11,4 +11,10 @@ export default defineEventHandler(() => ({
   initialCommandLimit,
   categories: [...new Set(zplCommandGuides.map(({ category }) => category))].sort(),
   guides: zplCommandGuides.slice(0, initialCommandLimit).map(zplCommandIndexEntry),
+  directory: zplCommandGuides.map(({ canonical, slug, title, category }) => ({
+    canonical,
+    slug,
+    title,
+    category,
+  })),
 }));

@@ -23,6 +23,9 @@ const expectedScreenshots = {
   "zpl-editor-social.png": [1200, 630],
   "zpl-editor-social-dark.png": [1200, 630],
 };
+const staticScreenshotAssets = {
+  "zpl-label-preview.png": [600, 800],
+};
 const expectedFaviconPngs = {
   "favicon-96x96.png": [96, 96],
   "apple-touch-icon.png": [180, 180],
@@ -74,6 +77,13 @@ for (const [filename, [width, height]] of Object.entries(expectedScreenshots)) {
     screenshotManifest.files?.[filename]?.sha256,
     `${filename} does not match the current capture manifest`,
   );
+  await cp(sourcePath, path.join(deployedScreenshotDirectory, filename));
+}
+for (const [filename, [width, height]] of Object.entries(staticScreenshotAssets)) {
+  const sourcePath = path.join(repositoryRoot, "public", "screenshots", filename);
+  const bytes = await readFile(sourcePath);
+  assert.deepEqual(pngDimensions(bytes), { width, height }, `${filename} has unexpected dimensions`);
+  assert.ok(bytes.byteLength > 5_000, `${filename} is unexpectedly small`);
   await cp(sourcePath, path.join(deployedScreenshotDirectory, filename));
 }
 await writeFile(
@@ -165,14 +175,21 @@ await writeFile(
 );
 
 const indexHtml = await readFile(path.join(outputDirectory, "index.html"), "utf8");
-assert.match(indexHtml, /Free Online ZPL Editor, Viewer &amp; Visual Designer/);
+assert.match(indexHtml, /Free Online ZPL Viewer &amp; Editor/);
+assert.match(indexHtml, /aria-label="Interactive ZPL viewer"/);
 assert.match(indexHtml, /rel="canonical" href="https:\/\/zplr\.de\/"/);
 assert.match(indexHtml, /application\/ld\+json/);
 assert.match(indexHtml, /Node\.js ZPL renderer/);
 assert.match(indexHtml, /<link(?=[^>]*rel="icon")(?=[^>]*href="\/favicon-96x96\.png")[^>]*>/);
 assert.doesNotMatch(indexHtml, /<link[^>]*rel="icon"[^>]*href="data:/);
-assert.match(indexHtml, /media="\(prefers-color-scheme: dark\)" srcset="\/screenshots\/zpl-editor-overview-dark\.png"/);
 assert.match(indexHtml, /media="\(prefers-color-scheme: dark\)" srcset="\/screenshots\/zpl-live-preview-dark\.png"/);
+assert.match(indexHtml, /href="\/screenshots\/zpl-label-preview\.png"/);
+const prefetchedHomepageScripts = [...indexHtml.matchAll(/<link rel="prefetch" as="script"[^>]*href="\/_nuxt\/([^"]+)"/g)]
+  .map((match) => match[1]);
+for (const filename of prefetchedHomepageScripts) {
+  const { size } = await stat(path.join(outputDirectory, "_nuxt", filename));
+  assert.ok(size < 250_000, `${filename} is too large to prefetch from the homepage (${size} bytes)`);
+}
 const editorHtml = await readFile(path.join(outputDirectory, "editor.html"), "utf8");
 assert.match(editorHtml, /noindex, follow/);
 assert.match(editorHtml, /Opening the local ZPL editor/);
@@ -181,11 +198,17 @@ const commandIndexHtml = await readFile(path.join(outputDirectory, "zpl-commands
 assert.match(commandIndexHtml, /Every ZPL command, explained and ready to render/);
 assert.match(commandIndexHtml, /rel="canonical" href="https:\/\/zplr\.de\/zpl-commands"/);
 assert.match(commandIndexHtml, /property="og:image" content="https:\/\/zplr\.de\/og\.png"/);
+const linkedCommandRoutes = new Set(
+  [...commandIndexHtml.matchAll(/href="(\/zpl-commands\/[^"#?]+)"/g)].map((match) => match[1]),
+);
+assert.equal(linkedCommandRoutes.size, 223, "command index must link every command guide in static HTML");
 const fieldOriginHtml = await readFile(path.join(outputDirectory, "zpl-commands", "caret-fo.html"), "utf8");
 assert.match(fieldOriginHtml, /\^FO Field Origin/);
 assert.match(fieldOriginHtml, /Edit in editor/);
 assert.match(fieldOriginHtml, /application\/ld\+json/);
 assert.match(fieldOriginHtml, /property="og:image" content="https:\/\/zplr\.de\/og\.png"/);
+assert.match(fieldOriginHtml, /href="\/editor#example=caret-fo-/);
+assert.doesNotMatch(fieldOriginHtml, /href="\/editor\?example=/);
 assert.equal(await fileExists(path.join(outputDirectory, "_worker.js")), false, "static output must not contain a Pages Worker");
 
 console.log(

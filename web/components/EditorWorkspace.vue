@@ -1161,12 +1161,25 @@ function showExampleImportNotice(kind: "success" | "error", message: string): vo
   }, 6_000);
 }
 
+function documentationExampleIdFromHash(hash: string): string | undefined {
+  const prefix = "#example=";
+  if (!hash.startsWith(prefix)) return undefined;
+  try {
+    return decodeURIComponent(hash.slice(prefix.length)).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function importDocumentationExampleFromUrl(): Promise<void> {
   const url = new URL(window.location.href);
-  const exampleId = url.searchParams.get("example")?.trim();
+  const queryExampleId = url.searchParams.get("example")?.trim();
+  const hashExampleId = documentationExampleIdFromHash(url.hash);
+  const exampleId = hashExampleId ?? queryExampleId;
   if (!exampleId) return;
 
   url.searchParams.delete("example");
+  if (hashExampleId) url.hash = "";
   const remainingQuery = url.searchParams.toString();
   window.history.replaceState(
     window.history.state,

@@ -147,6 +147,26 @@
           <p>Try a command code, parameter name, or a broader filter.</p>
           <button type="button" @click="clearFilters">Show all commands</button>
         </div>
+
+        <nav class="command-directory" aria-labelledby="complete-command-directory-heading">
+          <div class="command-directory-heading">
+            <div>
+              <p>Complete directory</p>
+              <h2 id="complete-command-directory-heading">All {{ coverage.commands }} ZPL commands</h2>
+            </div>
+            <span>Every guide is linked here for direct browsing.</span>
+          </div>
+          <div class="command-directory-grid">
+            <NuxtLink
+              v-for="guide in commandDirectory"
+              :key="guide.canonical"
+              :to="zplCommandRoute(guide)"
+            >
+              <code :class="`category-${guide.category}`">{{ guide.canonical }}</code>
+              <span>{{ guide.title }}</span>
+            </NuxtLink>
+          </div>
+        </nav>
       </section>
     </main>
 
@@ -167,6 +187,13 @@ import type {
 } from "../../../src/types/ZplDocument";
 import type { ZplCommandIndexGuide } from "../../../web/zplDocumentation";
 
+interface CommandDirectoryEntry {
+  canonical: string;
+  slug: string;
+  title: string;
+  category: CommandCategory;
+}
+
 interface CommandIndexPayload {
   coverage: {
     commands: number;
@@ -178,6 +205,7 @@ interface CommandIndexPayload {
   initialCommandLimit: number;
   categories: CommandCategory[];
   guides: ZplCommandIndexGuide[];
+  directory: CommandDirectoryEntry[];
 }
 
 const { data: documentation, error: documentationError } = await useFetch<CommandIndexPayload>(
@@ -194,11 +222,12 @@ const coverage = documentation.value.coverage;
 const initialCommandLimit = documentation.value.initialCommandLimit;
 const categories = documentation.value.categories;
 const zplCommandGuides = ref(documentation.value.guides);
+const commandDirectory = documentation.value.directory;
 const catalogLoading = ref(false);
 const catalogLoadError = ref(false);
 let catalogRequest: Promise<void> | undefined;
 
-function zplCommandRoute(guide: Pick<ZplCommandIndexGuide, "slug">): string {
+function zplCommandRoute(guide: Pick<ZplCommandIndexGuide, "slug"> | CommandDirectoryEntry): string {
   return `/zpl-commands/${guide.slug}`;
 }
 
@@ -653,6 +682,87 @@ useHead({
   font-weight: 750;
 }
 
+.command-directory {
+  margin-top: 4rem;
+  border-top: 1px solid rgb(228 228 231);
+  padding-top: 2rem;
+}
+
+.command-directory-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.command-directory-heading p {
+  color: rgb(113 113 122);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.command-directory-heading h2 {
+  margin-top: 0.3rem;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+}
+
+.command-directory-heading > span {
+  color: rgb(113 113 122);
+  font-size: 0.72rem;
+}
+
+.command-directory-grid {
+  display: grid;
+  margin-top: 1.25rem;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid rgb(228 228 231);
+  border-radius: 0.8rem;
+  background: rgb(228 228 231);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.command-directory-grid a {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+  background: white;
+  padding: 0.7rem 0.8rem;
+  transition: background-color 140ms ease;
+}
+
+.command-directory-grid a:hover {
+  background: rgb(250 250 250);
+}
+
+.command-directory-grid a:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid rgb(82 82 91);
+  outline-offset: -2px;
+}
+
+.command-directory-grid code {
+  min-width: 3.5rem;
+  font-size: 0.73rem;
+  font-weight: 850;
+}
+
+.command-directory-grid span {
+  overflow: hidden;
+  color: rgb(82 82 91);
+  font-size: 0.68rem;
+  line-height: 1.1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 1023px) {
   .command-toolbar {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -663,6 +773,10 @@ useHead({
   }
 
   .command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .command-directory-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -682,6 +796,16 @@ useHead({
 
   .command-card {
     min-height: 13rem;
+  }
+
+  .command-directory-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .command-directory-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -705,9 +829,27 @@ useHead({
   .search-field input,
   .filter-field,
   .command-card,
-  .show-all-row button {
+  .show-all-row button,
+  .command-directory-grid a {
     background: rgb(24 24 27);
     border-color: rgb(255 255 255 / 0.1);
+  }
+
+  .command-directory {
+    border-color: rgb(255 255 255 / 0.1);
+  }
+
+  .command-directory-grid {
+    border-color: rgb(255 255 255 / 0.1);
+    background: rgb(255 255 255 / 0.1);
+  }
+
+  .command-directory-grid a:hover {
+    background: rgb(39 39 42);
+  }
+
+  .command-directory-grid span {
+    color: rgb(161 161 170);
   }
 
   .search-field input,

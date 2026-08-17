@@ -18,27 +18,27 @@
               Free · open source · local-only
             </div>
             <h1 class="landing-hero-title mt-7 text-balance text-5xl font-black tracking-[-0.065em] sm:text-6xl lg:text-7xl xl:text-[5.35rem]">
-              Free Online <span>ZPL Editor,</span> Viewer &amp; Visual Designer
+              Free Online <span>ZPL Viewer</span> &amp; Editor
             </h1>
             <p class="landing-hero-copy mt-7 max-w-2xl text-pretty text-lg/8 sm:text-xl/9">
-              Take a label from raw Zebra Programming Language to a print-ready visual. Code, render, inspect, and arrange fields in one local workspace.
+              Paste or type Zebra Programming Language and preview the label instantly. The viewer renders in your browser, so your ZPL is never uploaded to a remote service.
             </p>
             <div class="landing-hero-actions mt-9 flex flex-col items-stretch gap-3 sm:flex-row">
               <NuxtLink
                 to="/editor"
-                aria-label="Open the free ZPL editor"
+                aria-label="Open the full ZPL editor"
                 class="landing-primary-cta inline-flex h-12 items-center justify-center px-5 text-sm font-black sm:w-auto"
               >
                 <IconVectorSquareEdit class="mr-2 size-5" aria-hidden="true" />
-                Open the free ZPL editor
+                Open the full ZPL editor
               </NuxtLink>
-              <a
-                href="#library"
+              <NuxtLink
+                to="/zpl-commands"
                 class="landing-secondary-cta inline-flex h-12 items-center justify-center px-5 text-sm font-black sm:w-auto"
               >
                 <IconCodeTags class="mr-2 size-5" aria-hidden="true" />
-                Use the ZPLr library
-              </a>
+                Browse ZPL commands
+              </NuxtLink>
             </div>
             <div class="landing-proof mt-8 flex flex-wrap gap-x-6 gap-y-3 font-mono text-[11px] font-bold tracking-[0.05em] uppercase">
               <span><i aria-hidden="true"></i>No sign-up</span>
@@ -48,30 +48,8 @@
           </div>
 
           <div class="landing-hero-visual relative mx-auto w-full max-w-4xl lg:mx-0">
-            <span class="landing-figure-index font-mono text-[10px] font-bold tracking-[0.15em] uppercase">01 / Live workspace</span>
-            <NuxtLink
-              to="/editor"
-              class="landing-hero-shot group block"
-            >
-              <div class="landing-shot-bar flex h-10 items-center justify-between px-4">
-                <span class="font-mono text-[10px] font-bold tracking-[0.12em] uppercase">shipping-label.zpl</span>
-                <span class="flex items-center gap-2 font-mono text-[10px] font-bold tracking-wider uppercase">
-                  <i class="size-1.5 rounded-full bg-emerald-500" aria-hidden="true"></i>
-                  Rendered locally
-                </span>
-              </div>
-              <picture class="block">
-                <source media="(prefers-color-scheme: dark)" :srcset="screenshots.overviewDark" />
-                <img
-                  :src="screenshots.overview"
-                  width="1440"
-                  height="900"
-                  fetchpriority="high"
-                  alt="ZPLr online ZPL editor showing ZPL code beside a rendered shipping label preview"
-                  class="landing-hero-image aspect-8/5 w-full object-cover object-top"
-                />
-              </picture>
-            </NuxtLink>
+            <span class="landing-figure-index font-mono text-[10px] font-bold tracking-[0.15em] uppercase">01 / Interactive viewer</span>
+            <ZplQuickViewer />
           </div>
         </div>
 
@@ -485,12 +463,11 @@ import logoUrl from "../../web/assets/logo.svg";
 
 const config = useRuntimeConfig();
 const canonical = `${config.public.siteUrl}/`;
-const title = "Free Online ZPL Editor, Viewer & Visual Designer | ZPLr";
-const description = "Edit, preview, and visually design ZPL labels locally in your browser. Use ZPLr as a free online editor or a TypeScript renderer for Node.js and the web.";
+const title = "Free Online ZPL Viewer & Editor | ZPLr";
+const description = "Paste ZPL code and preview Zebra labels instantly in your browser. Edit, validate, and export PNGs locally—free with no upload or sign-up.";
 const socialImage = `${config.public.siteUrl}/screenshots/zpl-editor-social.png`;
 const screenshots = {
-  overview: "/screenshots/zpl-editor-overview.png",
-  overviewDark: "/screenshots/zpl-editor-overview-dark.png",
+  quickPreview: "/screenshots/zpl-label-preview.png",
   preview: "/screenshots/zpl-live-preview.png",
   previewDark: "/screenshots/zpl-live-preview-dark.png",
   designer: "/screenshots/zpl-visual-designer.png",
@@ -603,8 +580,8 @@ const faqs = [
     answer: "A ZPL editor helps you write and inspect Zebra Programming Language label source. ZPLr combines source editing, command guidance, diagnostics, live rendering, and visual field editing in one browser workspace.",
   },
   {
-    question: "Can I preview ZPL online without uploading my label?",
-    answer: "Yes. ZPLr runs the parser and renderer locally in your browser, so the online ZPL viewer does not need to send your label source or imported data to a rendering server.",
+    question: "What is a ZPL viewer?",
+    answer: "A ZPL viewer turns Zebra Programming Language source into a visual label preview. ZPLr lets you paste and view ZPL online while running the parser and renderer locally in your browser, without uploading your label or data to a rendering server.",
   },
   {
     question: "Is ZPLr also a visual ZPL label designer?",
@@ -758,7 +735,7 @@ const structuredData = [
     "@type": "SoftwareApplication",
     name: "ZPLr",
     applicationCategory: "DeveloperApplication",
-    applicationSubCategory: "ZPL label editor and renderer",
+    applicationSubCategory: "ZPL viewer, label editor, and renderer",
     operatingSystem: "Any",
     url: `${config.public.siteUrl}/editor`,
     softwareVersion: config.public.packageVersion,
@@ -796,7 +773,7 @@ useSeoMeta({
   ogImage: socialImage,
   ogImageWidth: 1200,
   ogImageHeight: 630,
-  ogImageAlt: "ZPLr online ZPL editor with code and a rendered label",
+  ogImageAlt: "ZPLr online ZPL viewer with code and a rendered label preview",
   twitterCard: "summary_large_image",
   twitterTitle: title,
   twitterDescription: description,
@@ -809,15 +786,7 @@ useHead({
       rel: "preload",
       as: "image",
       type: "image/png",
-      href: screenshots.overview,
-      media: "(prefers-color-scheme: light)",
-    },
-    {
-      rel: "preload",
-      as: "image",
-      type: "image/png",
-      href: screenshots.overviewDark,
-      media: "(prefers-color-scheme: dark)",
+      href: screenshots.quickPreview,
     },
     { rel: "canonical", href: canonical },
   ],

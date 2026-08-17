@@ -77,7 +77,7 @@
                     <IconContentCopy v-else class="size-4" aria-hidden="true" />
                     {{ copiedExample === guide.featuredExample.id ? "Copied" : "Copy" }}
                   </button>
-                  <NuxtLink :to="{ path: '/editor', query: { example: guide.featuredExample.id } }">
+                  <NuxtLink :to="editorExampleRoute(guide.featuredExample.id)">
                     <IconPencilOutline class="size-4" aria-hidden="true" />
                     Edit in editor
                     <IconArrowRight class="size-3.5" aria-hidden="true" />
@@ -191,7 +191,7 @@
                             <IconContentCopy v-else class="size-4" aria-hidden="true" />
                             {{ copiedExample === example.id ? "Copied" : "Copy" }}
                           </button>
-                          <NuxtLink :to="{ path: '/editor', query: { example: example.id } }">
+                          <NuxtLink :to="editorExampleRoute(example.id)">
                             <IconPencilOutline class="size-4" aria-hidden="true" />
                             Edit in editor
                             <IconArrowRight class="size-3.5" aria-hidden="true" />
@@ -244,7 +244,7 @@
                       <IconContentCopy v-else class="size-4" aria-hidden="true" />
                       {{ copiedExample === example.id ? "Copied" : "Copy" }}
                     </button>
-                    <NuxtLink :to="{ path: '/editor', query: { example: example.id } }">
+                    <NuxtLink :to="editorExampleRoute(example.id)">
                       <IconPencilOutline class="size-4" aria-hidden="true" />
                       Edit in editor
                       <IconArrowRight class="size-3.5" aria-hidden="true" />
@@ -385,6 +385,10 @@ const {
 
 function zplCommandRoute(candidate: Pick<AdjacentCommandGuide, "slug">): string {
   return `/zpl-commands/${candidate.slug}`;
+}
+
+function editorExampleRoute(exampleId: string): string {
+  return `/editor#example=${encodeURIComponent(exampleId)}`;
 }
 const hasPreviews = Boolean(guide.featuredExample) || guide.signatures.some((signature) =>
   signature.examples.some(({ preview }) => preview) ||
