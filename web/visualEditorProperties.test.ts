@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { parseDocument, type HighlightRegion, type HighlightRegionType } from "../src/index.web";
 import {
+  fieldSupportsRotation,
   sourceEditForBarcodeType,
+  sourceEditForRotate,
   sourceEditForVisualProperty,
   visualBarcodeCommand,
   visualBarcodeTypes,
@@ -102,5 +104,54 @@ describe("visual editor metadata properties", () => {
     expect(applyEdit(source, sourceEditForVisualProperty(source, width!, "180")))
       .toContain("^GB180;40;2;B;0");
     expect(sourceEditForVisualProperty(source, color!, "purple")).toBeUndefined();
+  });
+});
+
+describe("visual editor rotation", () => {
+  it("detects rotatable fields from metadata orientation parameters", () => {
+    expect(fieldSupportsRotation(fieldFor("^XA^FO10,20^A0N,30,30^FDText^FS^XZ", "text"))).toBe(true);
+    expect(fieldSupportsRotation(fieldFor("^XA^FO10,20^BY2,3,80^BCN,80,Y,N,N^FD123^FS^XZ", "barcode"))).toBe(true);
+    expect(fieldSupportsRotation(fieldFor("^XA^FO10,20^BQN,2,5^FDdata^FS^XZ", "barcode"))).toBe(true);
+    expect(fieldSupportsRotation(fieldFor("^XA^FO10,20^GB100,40,2,B,0^FS^XZ", "box"))).toBe(false);
+    expect(fieldSupportsRotation(undefined)).toBe(false);
+  });
+
+  it("rotates text, barcode, and QR fields in canonical order", () => {
+    const text = "^XA^FO10,20^A0N,30,30^FDText^FS^XZ";
+    expect(applyEdit(text, sourceEditForRotate(text, fieldFor(text, "text"), "cw")))
+      .toContain("^A0R,30,30");
+    expect(applyEdit(text, sourceEditForRotate(text, fieldFor(text, "text"), "ccw")))
+      .toContain("^A0B,30,30");
+
+    const rotated = "^XA^FO10,20^A0R,30,30^FDText^FS^XZ";
+    expect(applyEdit(rotated, sourceEditForRotate(rotated, fieldFor(rotated, "text"), "ccw")))
+      .toContain("^A0N,30,30");
+
+    const barcode = "^XA^FO10,20^BY2,3,80^BCN,80,Y,N,N^FD123^FS^XZ";
+    expect(applyEdit(barcode, sourceEditForRotate(barcode, fieldFor(barcode, "barcode"), "cw")))
+      .toContain("^BCR,80,Y,N,N");
+
+    const qr = "^XA^FO10,20^BQN,2,5^FDdata^FS^XZ";
+    expect(applyEdit(qr, sourceEditForRotate(qr, fieldFor(qr, "barcode"), "cw")))
+      .toContain("^BQR,2,5");
+  });
+
+  it("wraps around the orientation cycle", () => {
+    const bottom = "^XA^FO10,20^A0B,30,30^FDText^FS^XZ";
+    expect(applyEdit(bottom, sourceEditForRotate(bottom, fieldFor(bottom, "text"), "cw")))
+      .toContain("^A0N,30,30");
+    const inverted = "^XA^FO10,20^A0I,30,30^FDText^FS^XZ";
+    expect(applyEdit(inverted, sourceEditForRotate(inverted, fieldFor(inverted, "text"), "ccw")))
+      .toContain("^A0R,30,30");
+  });
+
+  it("refuses to rotate fields without an orientation parameter or with a stale span", () => {
+    const box = "^XA^FO10,20^GB100,40,2,B,0^FS^XZ";
+    expect(sourceEditForRotate(box, fieldFor(box, "box"), "cw")).toBeUndefined();
+
+    const text = "^XA^FO10,20^A0N,30,30^FDText^FS^XZ";
+    const field = fieldFor(text, "text");
+    const shifted = `^FX comment\n${text}`;
+    expect(sourceEditForRotate(shifted, field, "cw")).toBeUndefined();
   });
 });

@@ -176,6 +176,70 @@ export function sourceEditForVisualProperty(
   return { start: command.span.start, end: command.span.end, text: replacement };
 }
 
+export type VisualRotationDirection = "cw" | "ccw";
+
+const orientationCycle = ["N", "R", "I", "B"];
+
+function orientationValues(parameter: ZplParameterDefinition): string[] {
+  return orientationCycle.filter((value) =>
+    unique([...(parameter.enumValues ?? []), ...parameter.choices]).includes(value));
+}
+
+function isOrientationParameter(parameter: ZplParameterDefinition): boolean {
+  return /orientation/i.test(parameter.name) && orientationValues(parameter).length >= 2;
+}
+
+interface OrientationTarget {
+  command: ZplCommandNode;
+  parameter: ZplParameterDefinition;
+}
+
+function orientationTargetForField(field: VisualField | undefined): OrientationTarget | undefined {
+  if (!field) return undefined;
+  for (const command of field.commands) {
+    const signature = getZplCommandSignature(command);
+    const parameter = signature?.parameters.find(isOrientationParameter);
+    if (signature && parameter) return { command, parameter };
+  }
+  return undefined;
+}
+
+/** True when a field's ZPL carries a metadata orientation parameter (N, R, I, or B). */
+export function fieldSupportsRotation(field: VisualField | undefined): boolean {
+  return orientationTargetForField(field) !== undefined;
+}
+
+/** Create one source edit that rotates a field 90 degrees clockwise or counterclockwise. */
+export function sourceEditForRotate(
+  source: string,
+  field: VisualField,
+  direction: VisualRotationDirection,
+): SourceEdit | undefined {
+  const target = orientationTargetForField(field);
+  if (!target) return undefined;
+  const command = currentCommand(source, target.command.span);
+  if (!command || command.canonical !== target.command.canonical) return undefined;
+  const signature = getZplCommandSignature(command);
+  if (!signature) return undefined;
+  const definition = signature.parameters.find((parameter) =>
+    parameter.slot === target.parameter.slot &&
+    parameter.component === target.parameter.component &&
+    parameter.key === target.parameter.key
+  );
+  if (!definition) return undefined;
+  const values = orientationValues(definition);
+  if (values.length < 2) return undefined;
+  const current = getZplParameterValue(command, signature, definition).trim().toUpperCase();
+  const index = values.indexOf(current);
+  const base = index >= 0 ? index : 0;
+  const step = direction === "cw" ? 1 : -1;
+  const next = values[(base + step + values.length) % values.length]!;
+  if (next === current) return undefined;
+  const replacement = replaceZplCommandParameter(command, signature, definition, next);
+  if (replacement === source.slice(command.span.start, command.span.end)) return undefined;
+  return { start: command.span.start, end: command.span.end, text: replacement };
+}
+
 const visualBarcodeCommands = [
   "^BC",
   "^B3",

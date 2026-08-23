@@ -35,6 +35,18 @@ Original imported files are stored in IndexedDB and included in workspace archiv
 
 Workspace import rejects unsupported manifests and enforces limits of 100 labels, 64 MB expanded data, 32 MB per entry, and 8 MB per ZPL source.
 
+## Sharing
+
+The **Share** button (or `Cmd/Ctrl+Shift+L`) copies a self-contained link of the form `https://zplr.de/editor#s=<token>` to the clipboard. The token compresses the active label's ZPL source and, when present, its bound variable data — nothing is uploaded. Opening the link loads the label into a fresh editor tab on the recipient's device.
+
+Shared links embed source only. Imported images and fonts live in the sender's browser storage and are not part of the link, so a shared label that references them renders with missing-resource diagnostics until those assets are re-imported. Labels whose compressed token exceeds the URL size limit cannot be shared as a link; save them as a workspace archive instead.
+
+## Rotation
+
+Text, barcode, and QR fields can be rotated in 90° steps with **Rotate clockwise** / **Rotate counterclockwise** in the **Arrange** menu or the `R` / `Shift+R` shortcuts. Rotation edits the field's ZPL orientation parameter, cycling its documented values in the order N → R → I → B, so the source stays authoritative and the change is undoable like every other visual edit. The Properties panel exposes the same orientation as a select.
+
+Fields without an orientation parameter — boxes, circles, ellipses, and lines — cannot be rotated; the rotate actions stay disabled for them. Locked fields are skipped when a selection mixes rotatable and non-rotatable layers.
+
 ## Shortcuts
 
 | Action | Shortcut |
@@ -42,10 +54,12 @@ Workspace import rejects unsupported manifests and enforces limits of 100 labels
 | Show editor help | `?` |
 | New / open / save label | `Cmd/Ctrl+N`, `Cmd/Ctrl+O`, `Cmd/Ctrl+S` |
 | Save workspace | `Cmd/Ctrl+Shift+S` |
+| Copy share link | `Cmd/Ctrl+Shift+L` |
 | Select all visual layers | `Cmd/Ctrl+A` while the designer is focused |
 | Copy / paste / duplicate layers | `Cmd/Ctrl+C`, `Cmd/Ctrl+V`, `Cmd/Ctrl+D` |
 | Delete selected layers | `Backspace` or `Delete` |
 | Move selected layers | Arrow keys |
+| Rotate selected layers 90° | `R` clockwise, `Shift+R` counterclockwise |
 | Undo / redo visual changes | `Cmd/Ctrl+Z`, `Cmd/Ctrl+Shift+Z` |
 | Render now | `Cmd/Ctrl+Enter` |
 | Command palette | `Cmd/Ctrl+P` |

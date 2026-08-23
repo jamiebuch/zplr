@@ -1,7 +1,9 @@
 import { devices, expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { disableServiceWorker } from "./helpers";
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, context }) => {
+  await disableServiceWorker(context);
   await page.addInitScript(() => {
     window.localStorage.clear();
     window.sessionStorage.clear();
@@ -176,6 +178,7 @@ test("keeps command documentation usable on a narrow dark viewport", async ({ br
     colorScheme: "dark",
     locale: "de-DE",
   });
+  await disableServiceWorker(context);
   const page = await context.newPage();
   page.on("console", (message) => {
     if (message.type() === "error" || message.type() === "warning") {

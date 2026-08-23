@@ -108,6 +108,10 @@
                   <button type="button" @click="toggleSelectedLock">{{ selectedFields.every((field) => field.locked) ? 'Unlock' : 'Lock' }}</button>
                   <button type="button" :disabled="selectedFields.some((field) => field.locked)" @click="hideSelectedFields">Hide from output</button>
                 </div>
+                <div class="mt-2 grid grid-cols-2 gap-1 border-t border-zinc-100 pt-2 dark:border-white/10">
+                  <button type="button" :disabled="!anySelectedRotatable" @click="rotateSelectedFields('cw')">Rotate clockwise</button>
+                  <button type="button" :disabled="!anySelectedRotatable" @click="rotateSelectedFields('ccw')">Rotate counterclockwise</button>
+                </div>
               </div>
             </details>
           </div>
@@ -708,12 +712,15 @@ import {
   type HiddenVisualField,
 } from "../zplrFieldMetadata";
 import {
+  fieldSupportsRotation,
   sourceEditForBarcodeType,
+  sourceEditForRotate,
   sourceEditForVisualProperty,
   visualBarcodeCommand,
   visualBarcodeTypes,
   visualPropertyGroups,
   type VisualPropertyParameter,
+  type VisualRotationDirection,
 } from "../visualEditorProperties";
 import {
   fieldNumberForVisualField,
@@ -784,6 +791,8 @@ const shortcuts: readonly { action: string; keys: readonly string[] }[] = [
   { action: "Paste copied layer", keys: ["⌘/Ctrl", "V"] },
   { action: "Delete selected layer", keys: ["Backspace / Delete"] },
   { action: "Duplicate selected layer", keys: ["⌘/Ctrl", "D"] },
+  { action: "Rotate selected layer 90° clockwise", keys: ["R"] },
+  { action: "Rotate selected layer 90° counterclockwise", keys: ["Shift", "R"] },
   { action: "Bring layer forward", keys: ["⌘/Ctrl", "]"] },
   { action: "Send layer backward", keys: ["⌘/Ctrl", "["] },
   { action: "Deselect", keys: ["Esc"] },
@@ -857,6 +866,9 @@ const selectedField = computed(() => {
 const selectionBounds = computed(() => unionVisualBounds(selectedFields.value));
 const allSelectedMovable = computed(() => selectedFields.value.length > 0 &&
   selectedFields.value.every((field) => field.movable && !field.locked));
+const anySelectedRotatable = computed(() => selectedFields.value.some(
+  (field) => !field.locked && fieldSupportsRotation(field),
+));
 const propertyGroups = computed(() => visualPropertyGroups(selectedField.value));
 const selectedBarcodeCommand = computed(() => visualBarcodeCommand(selectedField.value));
 const variableColumns = computed(() => props.variableColumns ?? []);
@@ -2253,6 +2265,9 @@ function handleDesignerKeydown(event: KeyboardEvent): void {
   } else if (!modifier && !event.altKey && event.key.toLowerCase() === "g") {
     handledShortcut(event);
     gridVisible.value = !gridVisible.value;
+  } else if (!modifier && !event.altKey && selected && event.key.toLowerCase() === "r") {
+    handledShortcut(event);
+    rotateSelectedFields(event.shiftKey ? "ccw" : "cw");
   } else if (!modifier && !event.altKey && event.key === "0") {
     handledShortcut(event);
     fitLabel();
@@ -2470,6 +2485,26 @@ function distributeSelection(axis: "horizontal" | "vertical"): void {
     selectedField.value,
   );
   if (edit) emitAndSelect(edit);
+}
+
+function rotateSelectedFields(direction: VisualRotationDirection): void {
+  const fields = selectedFields.value.filter((field) => !field.locked);
+  if (fields.length === 0) return;
+  const edits = fields.flatMap((field) => {
+    const edit = sourceEditForRotate(props.source, field, direction);
+    return edit ? [edit] : [];
+  });
+  if (edits.length === 0) return;
+  const origins = fields.map((field) => sourceOffsetAfterEdits(selectionOffset(field), edits));
+  const primary = selectedField.value
+    ? sourceOffsetAfterEdits(selectionOffset(selectedField.value), edits)
+    : origins.at(-1);
+  const transaction = sourceEditTransaction(edits, {
+    origins,
+    primary,
+    kinds: fields.map(({ kind }) => kind),
+  });
+  if (transaction) emitAndSelect(transaction);
 }
 
 function toggleSelectedLock(): void {

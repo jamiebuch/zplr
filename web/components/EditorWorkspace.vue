@@ -41,6 +41,10 @@
           <IconCogOutline class="size-4" aria-hidden="true" />
           <span class="sr-only">Editor and printer settings</span>
         </button>
+        <button class="toolbar-button inline-flex" type="button" title="Copy a shareable link for this label (⌘⇧L)" @click="copyShareLink">
+          <IconShareVariant class="size-4" aria-hidden="true" />
+          <span class="hidden sm:inline">Share</span>
+        </button>
         <button class="ml-1 inline-flex h-8 items-center gap-1.5 rounded-lg bg-zinc-900 px-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200" type="button" title="Render now (⌘Enter)" @click="renderNow">
           <IconPlay class="size-4" aria-hidden="true" />
           <span class="hidden sm:inline">Render</span>
@@ -549,6 +553,7 @@
             <dl class="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-xs">
               <dt>Command palette</dt><dd><kbd>⌘ P</kbd> / <kbd>F1</kbd></dd>
               <dt>Save / save all</dt><dd><kbd>⌘ S</kbd> · <kbd>⌘ ⇧ S</kbd></dd>
+              <dt>Share link</dt><dd><kbd>⌘ ⇧ L</kbd></dd>
               <dt>New / open file</dt><dd><kbd>⌘ N</kbd> · <kbd>⌘ O</kbd></dd>
               <dt>Switch file</dt><dd><kbd>Ctrl Tab</kbd></dd>
               <dt>Format document</dt><dd><kbd>⌘ ⇧ F</kbd></dd>
@@ -608,6 +613,7 @@ import {
   IconOpenInNew,
   IconPlay,
   IconPlus,
+  IconShareVariant,
   IconVectorSquareEdit,
 } from "@iconify-prerendered/vue-mdi";
 import { unzipSync, zipSync } from "fflate";
@@ -646,6 +652,12 @@ import {
   putWorkspaceAsset,
   type WorkspaceAssetMetadata,
 } from "../workspaceAssets";
+import {
+  decodeSharedLabel,
+  encodeSharedLabel,
+  sharedLabelHashPrefix,
+  sharedLabelTokenFromHash,
+} from "../share";
 import {
   getZplCommandDefinition,
   validateZplParameters,
@@ -1169,6 +1181,54 @@ function documentationExampleIdFromHash(hash: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+async function importSharedLabelFromUrl(): Promise<void> {
+  const url = new URL(window.location.href);
+  const token = sharedLabelTokenFromHash(url.hash);
+  if (!token) return;
+
+  url.hash = "";
+  const remainingQuery = url.searchParams.toString();
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${url.pathname}${remainingQuery ? `?${remainingQuery}` : ""}`,
+  );
+
+  const shared = decodeSharedLabel(token);
+  if (!shared) {
+    showExampleImportNotice("error", "That shared link could not be opened. Your workspace was not changed.");
+    return;
+  }
+  const document = addDocument(shared.source, shared.name);
+  document.variableData = normalizeVariableData(shared.data ?? emptyVariableData());
+  showExampleImportNotice("success", `Shared label opened as ${document.filename}.`);
+  await nextTick();
+  editorComponent.value?.focus();
+}
+
+async function copyShareLink(): Promise<void> {
+  const token = encodeSharedLabel({
+    name: filename.value,
+    source: source.value,
+    data: activeDocument.value.variableData,
+  });
+  if (!token) {
+    showExampleImportNotice("error", "This label is too large to share as a link. Save it as a workspace instead.");
+    return;
+  }
+  const url = `${window.location.origin}${window.location.pathname}${sharedLabelHashPrefix}${token}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    showExampleImportNotice("success", "Shareable link copied to your clipboard.");
+  } catch {
+    showExampleImportNotice("error", "Could not copy the link. Your browser blocked clipboard access.");
+  }
+}
+
+function handleShareHashChange(): void {
+  void importSharedLabelFromUrl();
 }
 
 async function importDocumentationExampleFromUrl(): Promise<void> {
@@ -1877,6 +1937,9 @@ function handleKeyboardShortcut(event: KeyboardEvent): void {
     event.preventDefault();
     if (event.shiftKey) downloadWorkspace();
     else downloadZpl();
+  } else if (event.key.toLowerCase() === "l" && event.shiftKey) {
+    event.preventDefault();
+    void copyShareLink();
   } else if (event.key.toLowerCase() === "o") {
     event.preventDefault();
     openFilePicker();
@@ -1950,9 +2013,11 @@ watch(splitPercent, applySplit);
 onMounted(() => {
   persistEditorPreferences();
   schedulePreview(0);
+  void importSharedLabelFromUrl();
   void importDocumentationExampleFromUrl();
   window.addEventListener("keydown", handleKeyboardShortcut, true);
   window.addEventListener("resize", applySplit);
+  window.addEventListener("hashchange", handleShareHashChange);
   applySplit();
 });
 
@@ -1965,6 +2030,7 @@ onBeforeUnmount(() => {
   resizeCleanup?.();
   window.removeEventListener("keydown", handleKeyboardShortcut, true);
   window.removeEventListener("resize", applySplit);
+  window.removeEventListener("hashchange", handleShareHashChange);
 });
 </script>
 

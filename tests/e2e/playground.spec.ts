@@ -1,5 +1,10 @@
 import { expect, test, type Locator } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { disableServiceWorker } from "./helpers";
+
+test.beforeEach(async ({ context }) => {
+  await disableServiceWorker(context);
+});
 
 async function paintedFieldPosition(field: Locator): Promise<{ x: number; y: number }> {
   return field.evaluate((element) => {
@@ -91,7 +96,9 @@ test("renders locally and links to the dedicated editor route", async ({ page, r
   ]) {
     const screenshot = page.getByAltText(alt);
     await expect.poll(() =>
-      screenshot.evaluate((image: HTMLImageElement) => new URL(image.currentSrc).pathname),
+      screenshot.evaluate((image: HTMLImageElement) =>
+        image.currentSrc ? new URL(image.currentSrc).pathname : "",
+      ),
     ).toMatch(/-dark\.png$/);
   }
   await page.emulateMedia({ colorScheme: "light" });
@@ -148,6 +155,7 @@ test("opens directly as a full IDE and links diagnostics to source", async ({ pa
 });
 
 test("keeps the loading shell visible until the asynchronous editor is ready", async ({ page }) => {
+  test.slow();
   let chunkRequested = false;
   let releaseChunk = (): void => {};
   const chunkGate = new Promise<void>((resolve) => {
@@ -166,13 +174,19 @@ test("keeps the loading shell visible until the asynchronous editor is ready", a
 
   try {
     await page.goto("/editor", { waitUntil: "domcontentloaded" });
-    await expect.poll(() => chunkRequested).toBe(true);
-    await expect(page.getByRole("status")).toHaveText("Opening the local ZPL editor…");
+    // chunkRequested is only set once the gated chunk has been fetched, which
+    // can be slow when the whole suite is running in parallel.
+    await expect.poll(() => chunkRequested, { timeout: 30_000 }).toBe(true);
+    await expect(page.getByRole("status")).toHaveText("Opening the local ZPL editor…", { timeout: 30_000 });
   } finally {
     releaseChunk();
   }
 
   await expect(page.getByTestId("editor-workspace")).toBeVisible({ timeout: 30_000 });
+  // Let every in-flight route handler (each _nuxt chunk goes through
+  // route.fetch()) settle before teardown, otherwise context.close can race a
+  // handler that is still fetching under a heavily parallelized run.
+  await page.waitForLoadState("networkidle");
 });
 
 test("uses the system color scheme as the default editor theme", async ({ page }) => {
@@ -989,6 +1003,7 @@ test("uses distinct snapline colors for the label and other objects", async ({ p
 });
 
 test("scrolls the code editor to a field revealed from WYSIWYG", async ({ page }) => {
+  test.slow();
   await page.goto("/editor");
   await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });
 
@@ -1250,6 +1265,98 @@ test("imports, places, and atomically renames an image resource", async ({ page 
   const editorSurface = page.getByTestId("zpl-editor").locator(".monaco-editor .view-lines");
   await expect(editorSurface).toContainText("R:BRAND.GRF");
   await expect(page.getByTestId("visual-label-canvas").locator('[data-visual-kind="graphic"]')).toHaveCount(1);
+});
+
+test("round-trips a label through a self-contained share link", async ({ page }) => {
+  await page.addInitScript(() => {
+    const captured: string[] = [];
+    (window as unknown as Record<string, unknown>).__zplrCopiedLinks = captured;
+    navigator.clipboard.writeText = (text: string) => {
+      captured.push(text);
+      return Promise.resolve();
+    };
+  });
+  const readCopiedLink = () =>
+    page.evaluate(() => {
+      const links = (window as unknown as { __zplrCopiedLinks?: string[] }).__zplrCopiedLinks;
+      return links?.at(-1) ?? "";
+    });
+  await page.goto("/editor");
+  await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press("Control+N");
+
+  const editorSurface = page.getByTestId("zpl-editor").locator(".monaco-editor .view-lines");
+  await editorSurface.click({ position: { x: 80, y: 40 } });
+  await page.keyboard.press("Control+A");
+  await page.keyboard.press("Meta+A");
+  await page.keyboard.insertText("^XA\n^PW300\n^LL200\n^FO40,40^A0N,30,30^FDShared label^FS\n^XZ");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  const notice = page.locator(".example-import-notice");
+  await expect(notice).toContainText("Shareable link copied to your clipboard.");
+  const shareUrl = await readCopiedLink();
+  expect(shareUrl).toMatch(/^https?:\/\/[^/]+\/editor#s=[A-Za-z0-9_-]+$/);
+
+  await page.goto(shareUrl);
+  await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".example-import-notice")).toContainText(/Shared label opened as untitled.*\.zpl\./);
+  await expect(editorSurface).toContainText("Shared label");
+  await expect(page).toHaveURL(/\/editor$/);
+
+  await page.keyboard.press("Control+Shift+L");
+  await expect(page.locator(".example-import-notice")).toContainText("Shareable link copied to your clipboard.");
+  expect(await readCopiedLink()).toMatch(/^https?:\/\/[^/]+\/editor#s=[A-Za-z0-9_-]+$/);
+});
+
+test("rejects a malformed share link without changing the workspace", async ({ page }) => {
+  await page.goto("/editor#s=not-a-share-token");
+  await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".example-import-notice")).toContainText(
+    "That shared link could not be opened. Your workspace was not changed.",
+  );
+  await expect(page.getByLabel("Open editor tabs").getByRole("button", { name: /untitled/ })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/editor$/);
+});
+
+test("rotates visual fields with the keyboard and the arrange menu", async ({ page }) => {
+  await page.goto("/editor");
+  await expect(page.getByTestId("zpl-editor")).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press("Control+N");
+
+  const editorSurface = page.getByTestId("zpl-editor").locator(".monaco-editor .view-lines");
+  const visualFooter = page.locator(".designer-root footer");
+  const textField = page.getByRole("button", { name: "Text at 40, 40", exact: true });
+  await expect(textField).toBeVisible();
+
+  await textField.focus();
+  await textField.press("Space");
+  await expect(visualFooter).toContainText("Text selected");
+  await textField.press("r");
+  await expect(editorSurface).toContainText("^A0R,40,40");
+  await expect(visualFooter).toContainText("Text selected");
+  await textField.press("Shift+R");
+  await expect(editorSurface).toContainText("^A0N,40,40");
+
+  const arrange = page.locator("details.designer-arrange").filter({ has: page.getByText("Arrange", { exact: true }) });
+  await arrange.locator("summary").click();
+  await expect(arrange.getByRole("button", { name: "Rotate clockwise", exact: true })).toBeEnabled();
+  await expect(arrange.getByRole("button", { name: "Rotate counterclockwise", exact: true })).toBeEnabled();
+  await arrange.getByRole("button", { name: "Rotate clockwise", exact: true }).click();
+  await expect(editorSurface).toContainText("^A0R,40,40");
+  await arrange.getByRole("button", { name: "Rotate counterclockwise", exact: true }).click();
+  await expect(editorSurface).toContainText("^A0N,40,40");
+  await arrange.locator("summary").click();
+
+  await page.getByRole("button", { name: "Add box", exact: true }).click();
+  const box = page.getByRole("button", { name: "Box at 360, 580", exact: true });
+  await expect(box).toBeVisible();
+  await box.focus();
+  await box.press("Space");
+  await expect(visualFooter).toContainText("Box selected");
+  await arrange.locator("summary").click();
+  await expect(arrange.getByRole("button", { name: "Rotate clockwise", exact: true })).toBeDisabled();
+  await expect(arrange.getByRole("button", { name: "Rotate counterclockwise", exact: true })).toBeDisabled();
 });
 
 for (const colorScheme of ["light", "dark"] as const) {

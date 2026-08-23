@@ -160,9 +160,10 @@ Per-render `fieldValues` fill numbered `^FN` fields without rewriting the templa
 
 - A Monaco-based ZPL editor with syntax highlighting, formatting, command guidance, and source-linked diagnostics.
 - A live ZPL viewer with true label dimensions, configurable print density, multiple-label support, and PNG export.
-- A WYSIWYG ZPL label designer with drag, resize, snapping, guides, alignment, layers, properties, and synchronized source selection.
+- A WYSIWYG ZPL label designer with drag, resize, rotation, snapping, guides, alignment, layers, properties, and synchronized source selection.
 - CSV and JSON variable-data records bound to `^FN` fields, live record previews, and batch PNG export.
 - Imported graphics and TrueType fonts plus portable ZPL and workspace ZIP exports.
+- Self-contained shareable links that compress a label's source (and bound data) into the URL — no upload, no account.
 
 [![Visual ZPL label designer with a drag-and-drop canvas, layers, guides, and field properties](https://raw.githubusercontent.com/le2ni/zplr/main/public/screenshots/zpl-visual-designer.png)](https://zplr.de/editor)
 

@@ -30,10 +30,20 @@ const expectedFaviconPngs = {
   "favicon-96x96.png": [96, 96],
   "apple-touch-icon.png": [180, 180],
 };
+const expectedPwaIcons = {
+  "pwa/icon-192.png": [192, 192],
+  "pwa/icon-512.png": [512, 512],
+  "pwa/icon-192-maskable.png": [192, 192],
+  "pwa/icon-512-maskable.png": [512, 512],
+};
 
 assert.ok(expectedRunId, "ZPLR_SCREENSHOT_RUN_ID is required");
 await stat(outputDirectory);
 for (const [filename, [width, height]] of Object.entries(expectedFaviconPngs)) {
+  const bytes = await readFile(path.join(outputDirectory, filename));
+  assert.deepEqual(pngDimensions(bytes), { width, height }, `${filename} has unexpected dimensions`);
+}
+for (const [filename, [width, height]] of Object.entries(expectedPwaIcons)) {
   const bytes = await readFile(path.join(outputDirectory, filename));
   assert.deepEqual(pngDimensions(bytes), { width, height }, `${filename} has unexpected dimensions`);
 }
@@ -128,6 +138,15 @@ assert.equal(commandHtmlFiles.length, 223, "generated command detail page count 
 assert.equal(await fileExists(path.join(outputDirectory, "zpl-commands.html")), true, "generated command index is missing");
 assert.equal(await fileExists(path.join(outputDirectory, "zpl-commands", "caret-fo.html")), true, "generated ^FO page is missing");
 assert.equal(await fileExists(path.join(outputDirectory, "zpl-commands", "tilde-dg.html")), true, "generated ~DG page is missing");
+const serviceWorker = await readFile(path.join(outputDirectory, "sw.js"), "utf8");
+assert.match(serviceWorker, /precacheAndRoute/, "service worker must precache the static build");
+assert.match(serviceWorker, /\{url:"editor",revision:/, "service worker must precache the editor route");
+assert.match(serviceWorker, /\{url:"\/",revision:/, "service worker must precache the homepage route");
+const webManifest = JSON.parse(await readFile(path.join(outputDirectory, "manifest.webmanifest"), "utf8"));
+assert.equal(webManifest.start_url, "/editor", "web manifest must start in the editor");
+assert.equal(webManifest.display, "standalone", "web manifest must install standalone");
+assert.ok(webManifest.icons.some((icon) => icon.sizes === "192x192" && icon.purpose === "any"), "web manifest is missing a 192px icon");
+assert.ok(webManifest.icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "maskable"), "web manifest is missing a maskable 512px icon");
 const commandIndexData = JSON.parse(
   await readFile(path.join(outputDirectory, "zpl-command-index.json"), "utf8"),
 );
@@ -169,10 +188,10 @@ for (const htmlFile of htmlFiles) {
 const headerTemplate = await readFile(path.join(repositoryRoot, "public", "_headers"), "utf8");
 const scriptDirective = `script-src 'self'${inlineScriptHashes.size ? ` ${[...inlineScriptHashes].sort().join(" ")}` : ""}`;
 assert.match(headerTemplate, /script-src 'self'[^;]*/);
-await writeFile(
-  path.join(outputDirectory, "_headers"),
-  headerTemplate.replace(/script-src 'self'[^;]*/, scriptDirective),
-);
+const outputHeaders = headerTemplate.replace(/script-src 'self'[^;]*/, scriptDirective);
+assert.match(outputHeaders, /\/sw\.js\n  Cache-Control: public, max-age=0, must-revalidate/, "service worker must be revalidated on every load");
+assert.match(outputHeaders, /\/manifest\.webmanifest\n  Cache-Control: public, max-age=0, must-revalidate/, "web manifest must be revalidated on every load");
+await writeFile(path.join(outputDirectory, "_headers"), outputHeaders);
 
 const indexHtml = await readFile(path.join(outputDirectory, "index.html"), "utf8");
 assert.match(indexHtml, /Free Online ZPL Viewer &amp; Editor/);
@@ -184,6 +203,7 @@ assert.match(indexHtml, /<link(?=[^>]*rel="icon")(?=[^>]*href="\/favicon-96x96\.
 assert.doesNotMatch(indexHtml, /<link[^>]*rel="icon"[^>]*href="data:/);
 assert.match(indexHtml, /media="\(prefers-color-scheme: dark\)" srcset="\/screenshots\/zpl-live-preview-dark\.png"/);
 assert.match(indexHtml, /href="\/screenshots\/zpl-label-preview\.png"/);
+assert.match(indexHtml, /<link[^>]*rel="manifest"[^>]*href="\/manifest\.webmanifest"[^>]*>/, "index.html must link the web manifest");
 const prefetchedHomepageScripts = [...indexHtml.matchAll(/<link rel="prefetch" as="script"[^>]*href="\/_nuxt\/([^"]+)"/g)]
   .map((match) => match[1]);
 for (const filename of prefetchedHomepageScripts) {
