@@ -30,7 +30,11 @@ which is authoritative when other documentation has not yet been synchronized.
 
 The port does not include the browser renderer or Nuxt application. In
 particular, `src/index.web.ts` remains TypeScript; the .NET project mirrors the
-Node `skia-canvas` rendering path.
+Node `skia-canvas` rendering path. Two files intentionally diverge for throughput
+while staying upsert-friendly — `Helper/Rendering/Canvas.cs` (`DrawRaster` bulk
+copy) and `Core/FontEngine.cs` (process-wide glyph cache targeting `6/8/12/24`
+dpmm). See [Performance guide](PERFORMANCE.md) for the design and the TS upsert
+boundary.
 
 ## Restore, build, and test
 
@@ -108,21 +112,23 @@ substitute for that C# step and must not be described as updating `Assets/*.cs`.
 
 - [ ] Review the relevant `src/core/*.ts` diff and identify the behavior being ported.
 - [ ] Apply the equivalent change to the matching `dotnet/Zplr.Renderer/Core/*.cs` file, preserving C# naming and types.
+- [ ] If the change touches a hot path (`Canvas.cs`, `FontEngine.cs`, `Raster.cs`, `GraphicDecoder.cs`, `JobRenderer.cs`) — keep the `// Perf divergence` comments and follow [PERFORMANCE.md](PERFORMANCE.md#how-to-keep-ts-upserts-fast) instead of reverting to a literal translation.
 - [ ] Add or update a mirrored xUnit test in `dotnet/Zplr.Renderer.Tests`.
 - [ ] Add or update a shared fixture when the behavior is best represented by a complete ZPL job.
 - [ ] Regenerate affected assets with the checked-in helper and inspect the result.
 - [ ] Run `dotnet test dotnet/Zplr.slnx -c Release` and review diagnostics, not only exit status.
+- [ ] For perf-sensitive changes — run the benchmark at `6,8,12,24` dpmm (see [PERFORMANCE.md](PERFORMANCE.md#benchmarks)) and record representative hash logs.
 - [ ] If output is not pixel-exact, add the parity limitation to the appropriate README notes and explain the expected difference in the test or change description.
 
 ## Pack and inspect a local package
 
-The project currently declares version `0.3.0` in
+The project currently declares version `0.3.1` in
 `dotnet/Zplr.Renderer/Zplr.Renderer.csproj`. To create a local Release package
 using that current version:
 
 ```powershell
 dotnet pack dotnet/Zplr.Renderer/Zplr.Renderer.csproj -c Release --no-restore --output dotnet/artifacts/packages
-Get-ChildItem -LiteralPath dotnet/artifacts/packages -Filter "Zplr.Renderer.0.3.0.nupkg"
+Get-ChildItem -LiteralPath dotnet/artifacts/packages -Filter "Zplr.Renderer.0.3.1.nupkg"
 ```
 
 Before a release, change the `<Version>` value in
@@ -142,7 +148,7 @@ committed project file, or a command copied into shell history.
 if (-not $env:NUGET_SOURCE) { throw "Set NUGET_SOURCE before publishing." }
 if (-not $env:NUGET_API_KEY) { throw "Set NUGET_API_KEY before publishing." }
 
-dotnet nuget push "dotnet/artifacts/packages/Zplr.Renderer.0.3.0.nupkg" `
+dotnet nuget push "dotnet/artifacts/packages/Zplr.Renderer.0.3.1.nupkg" `
     --source $env:NUGET_SOURCE `
     --api-key $env:NUGET_API_KEY
 ```

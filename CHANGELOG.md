@@ -2,6 +2,16 @@
 
 All notable changes follow Keep a Changelog. ZPLr uses semantic versioning from 0.3.0 onward.
 
+## [0.3.1] - 2026-09-01
+
+### Changed — .NET renderer performance
+
+- `SkiaCanvas.DrawRaster` now does a single bulk 1bpp→RGBA expansion with `ArrayPool` + `SKImage.FromPixels` → `DrawImage` instead of `SetPixel` per dot, targeting all print densities `6/8/12/24` dpmm.
+- `FontEngine` now shares a process-wide `ConcurrentDictionary` glyph cache for the built-in `TexGyreHeros` OTF (keyed by `char:width:height` so densities do not collide, 64M-pixel budget) with a static `Lazy<SKTypeface>`; provider fonts remain per-engine. See `dotnet/PERFORMANCE.md`.
+- `Raster.FillRect`/`BlitRaster` operate on packed bytes with masks instead of per-dot `SetDot`/`GetDot`; `BitmapFont.GlyphAdvance` no longer uses `Regex`.
+- All literal `Regex` patterns in `Interpreter`, `GraphicDecoder`, `JobRenderer`, `LayoutRenderer`, `PngDecoder`, `DocumentParser` are now `static readonly Compiled`.
+- `Interpreter.DecodeFieldBytes`/`DecodeHexFieldData` avoid LINQ allocations.
+
 ## [0.3.0] - 2026-07-27
 
 ### Added

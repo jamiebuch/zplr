@@ -76,20 +76,35 @@ public static class BitmapFont
         return Spleen5x8.Rows.ContainsKey(cp);
     }
 
+    // Perf: avoid Regex per glyph - this is called thousands of times during FB wrapping
+    private static bool IsNarrowAdvance(char ch) => ch == '.' || ch == ',' || ch == ':' || ch == ';' || ch == '!' || ch == '|' || ch == '\'' || ch == 'I' || ch == 'l' || ch == '1';
+    private static bool IsWideAdvance(char ch) => ch == 'M' || ch == 'W' || ch == '@' || ch == '#' || ch == '%';
+
     public static int GlyphAdvance(string character, int requestedWidth, bool proportional)
     {
         var width = Math.Max(1, requestedWidth);
         if (!proportional) return width;
         var cp = char.ConvertToUtf32(character, 0);
         // TexGyre ratios are per codepoint, fallback heuristic
-        if (cp < TexGyreHerosCondensed.AdvanceRatios.Length)
+        if ((uint)cp < (uint)TexGyreHerosCondensed.AdvanceRatios.Length)
         {
             var ratio = TexGyreHerosCondensed.AdvanceRatios[cp];
             if (ratio != 0) return Math.Max(1, (int)Math.Round(width * ratio));
         }
-        if (character == " ") return Math.Max(1, (int)Math.Round(width * 0.5));
-        if (System.Text.RegularExpressions.Regex.IsMatch(character, @"[.,:;!|'Il1]")) return Math.Max(1, (int)Math.Round(width * 0.45));
-        if (System.Text.RegularExpressions.Regex.IsMatch(character, @"[MW@#%]")) return width;
+        if (character.Length == 1)
+        {
+            var ch = character[0];
+            if (ch == ' ') return Math.Max(1, (int)Math.Round(width * 0.5));
+            if (IsNarrowAdvance(ch)) return Math.Max(1, (int)Math.Round(width * 0.45));
+            if (IsWideAdvance(ch)) return width;
+        }
+        else
+        {
+            // Surrogate pair or multi-char (should be single scalar): fallback to string checks
+            if (character == " ") return Math.Max(1, (int)Math.Round(width * 0.5));
+            // For multi-codepoint ligatures, treat as wide-ish
+            if (character.Length == 2 && char.IsSurrogatePair(character, 0)) return Math.Max(1, (int)Math.Round(width * 0.75));
+        }
         return Math.Max(1, (int)Math.Round(width * 0.75));
     }
 

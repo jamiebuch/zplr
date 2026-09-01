@@ -23,7 +23,7 @@ Port of the Node.js renderer (`src/index.node.ts` + `skia-canvas`) to .NET 10. F
 | `src/core/jobRenderer.ts` | `Core/JobRenderer.cs` (`SessionState` + `DynamicLabel`/`SN/SF`/`FC` + `~DG/~DB/~DY` + `PngDecoder`/`ImageDecoder`) |
 | `src/assets/*.generated.ts` | `Assets/*.cs` (paired C# conversion/export workflow in [DEVELOPMENT.md](DEVELOPMENT.md#porting-and-test-workflow), keep diff-friendly) |
 
-`src/index.web.ts` and the Nuxt app stay in TypeScript — only the Node `skia-canvas` path is ported.
+`src/index.web.ts` and the Nuxt app stay in TypeScript — only the Node `skia-canvas` path is ported. See [PERFORMANCE.md](PERFORMANCE.md) for the intentional perf divergences (`Canvas.DrawRaster` bulk copy, `FontEngine` process-wide glyph cache targeting `6/8/12/24` dpmm) and how they remain upsert-friendly.
 
 ## Requirements
 
@@ -67,6 +67,7 @@ var doc = ZplRenderer.ParseDocument(zpl);
 
 - [Application integration](INTEGRATION.md) — install and use the NuGet package from a .NET application.
 - [Development and release](DEVELOPMENT.md) — build, test, extend, pack, and publish the renderer.
+- [Performance guide](PERFORMANCE.md) — why dotnet was slower, process-wide glyph cache for all densities, and how to keep TS upserts fast.
 
 ## Build & test
 
@@ -81,6 +82,7 @@ dotnet test dotnet/Zplr.slnx -c Release
 1. `git diff src/core/foo.ts` → apply same hunk to `dotnet/Zplr.Renderer/Core/Foo.cs` (PascalCase, `string`/`int`/`bool`, `List<T>`/`Dictionary<K,V>`).
 2. Assets: checked-in JavaScript helpers generate TypeScript assets; the paired C# asset conversion/export maintainer workflow is described in [Development and release](DEVELOPMENT.md#porting-and-test-workflow).
 3. Add/adjust xUnit case mirroring the vitest fixture.
+4. For perf-sensitive files (`Canvas.cs`, `FontEngine.cs`, `Raster.cs`) keep the `// Perf divergence` comments and follow [PERFORMANCE.md](PERFORMANCE.md#how-to-keep-ts-upserts-fast) instead of reverting to a literal TS translation.
 
 ## Current coverage (phase 2 — representative fixtures green for layout, hashes logged)
 

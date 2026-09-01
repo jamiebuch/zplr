@@ -7,13 +7,13 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>Zplr.Renderer</RootNamespace>
     <AssemblyName>Zplr.Renderer</AssemblyName>
-    <Version>0.3.0</Version>
+    <Version>0.3.1</Version>
     <Authors>zplr</Authors>
     <Description>Port of zplr Node.js renderer — ZPL label parsing and raster rendering for .NET</Description>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <NoWarn>1591;CS1591</NoWarn>
-    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnforceExtendedAnalyzerRules>false</EnforceExtendedAnalyzerRules>
   </PropertyGroup>
 

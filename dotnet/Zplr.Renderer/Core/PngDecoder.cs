@@ -1,5 +1,6 @@
 // Port of src/core/pngDecoder.ts
 using System.IO.Compression;
+using System.Text.RegularExpressions;
 
 namespace Zplr.Renderer.Core;
 
@@ -10,6 +11,8 @@ public sealed class PngDecodeError : Exception
 
 public static class PngDecoder
 {
+    private static readonly Regex ChunkTypeRegex = new(@"^[A-Za-z]{4}$", RegexOptions.Compiled);
+
     private static uint UInt32BE(byte[] data, int offset) =>
         (uint)(data[offset] * 0x1000000 + (data[offset + 1] << 16) + (data[offset + 2] << 8) + data[offset + 3]);
 
@@ -96,7 +99,7 @@ public static class PngDecoder
             int chunkEnd = offset + 12 + length;
             if (chunkEnd > data.Length) throw new PngDecodeError("Downloaded PNG contains a truncated chunk.");
             string type = System.Text.Encoding.ASCII.GetString(data, offset + 4, 4);
-            if (!System.Text.RegularExpressions.Regex.IsMatch(type, "^[A-Za-z]{4}$"))
+            if (!ChunkTypeRegex.IsMatch(type))
                 throw new PngDecodeError("Downloaded PNG contains an invalid chunk type.");
             if ((type[2] & 0x20) != 0) throw new PngDecodeError("Downloaded PNG contains a chunk with an invalid reserved bit.");
             byte[] body = data.AsSpan(offset + 8, length).ToArray();

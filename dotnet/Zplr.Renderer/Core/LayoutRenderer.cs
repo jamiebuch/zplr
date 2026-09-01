@@ -1,8 +1,14 @@
 // Port of src/core/layoutRenderer.ts — barcode encoding helpers (Code39, Code128, GS1-128)
+using System.Text.RegularExpressions;
+
 namespace Zplr.Renderer.Core;
 
 public static class LayoutRenderer
 {
+    private static readonly Regex NumericRegex = new(@"^\d+$", RegexOptions.Compiled);
+    private static readonly Regex TwoDigitsRegex = new(@"^\d{2}$", RegexOptions.Compiled);
+
+
     private static readonly string[] Code39Characters = new[] { "0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","-","."," ","$","/","+","%","*" };
     private static readonly int[] Code39Encodings = new[] { 20957,29783,23639,30485,20951,29813,23669,20855,29789,23645,29975,23831,30533,22295,30149,24005,21623,29981,23837,22301,30023,23879,30545,22343,30161,24017,21959,30065,23921,22385,29015,18263,29141,17879,29045,18293,17783,29021,18269,17477,17489,17681,20753,35770 };
     private static readonly long[] Code128Encodings = new long[] {
@@ -32,7 +38,7 @@ public static class LayoutRenderer
     }
 
     private static string Mod10CheckDigit(string data){
-        if(!System.Text.RegularExpressions.Regex.IsMatch(data, @"^\d+$")) throw new Exception("A Code 128 UCC check digit requires numeric field data.");
+        if(!NumericRegex.IsMatch(data)) throw new Exception("A Code 128 UCC check digit requires numeric field data.");
         int sum=0, w=3;
         for(int i=data.Length-1;i>=0;i--){ sum+= (data[i]-'0')*w; w= w==3?1:3; }
         return ((10 - (sum%10))%10).ToString();
@@ -79,7 +85,7 @@ public static class LayoutRenderer
             }
             if(set=="C"){
                 string pair=data.Substring(srcIdx, Math.Min(2, data.Length-srcIdx));
-                if(!System.Text.RegularExpressions.Regex.IsMatch(pair, @"^\d{2}$")) throw new Exception("Code 128 subset C requires pairs of numeric digits.");
+                if(!TwoDigitsRegex.IsMatch(pair)) throw new Exception("Code 128 subset C requires pairs of numeric digits.");
                 values.Add(int.Parse(pair)); display+=pair; srcIdx+=2; continue;
             }
             string ch=data[srcIdx++].ToString();

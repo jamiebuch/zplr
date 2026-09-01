@@ -55,9 +55,64 @@ public static class Raster
         var startY = Math.Max(0, y);
         var endX = Math.Min(raster.Width, (int)Math.Ceiling(x + (double)width));
         var endY = Math.Min(raster.Height, (int)Math.Ceiling(y + (double)height));
+        if (startX >= endX || startY >= endY) return;
+        // Fast path: operate on packed bytes instead of per-dot SetDot
+        // This is hot for boxes, barcodes, graphics (often hundreds of rects per label)
+        var isSet = operation == "set";
+        var isClear = operation == "clear";
+        // xor otherwise
+        var stride = raster.Stride;
+        var data = raster.Data;
+        var startByte = startX >> 3;
+        var endByteExcl = (endX + 7) >> 3; // ceil
+        var sameByteRow = (startX >> 3) == ((endX - 1) >> 3);
         for (var py = startY; py < endY; py++)
-            for (var px = startX; px < endX; px++)
-                SetDot(raster, px, py, operation);
+        {
+            var rowBase = py * stride;
+            if (sameByteRow)
+            {
+                var bIdx = rowBase + startByte;
+                int startOff = startX & 7;
+                int endOff = endX & 7;
+                int mask;
+                if (endOff == 0) mask = 0xFF >> startOff;
+                else mask = (0xFF >> startOff) & (0xFF << (8 - endOff) & 0xFF);
+                if (isSet) data[bIdx] |= (byte)mask;
+                else if (isClear) data[bIdx] &= (byte)~mask;
+                else data[bIdx] ^= (byte)mask;
+            }
+            else
+            {
+                // first partial byte
+                {
+                    var bIdx = rowBase + startByte;
+                    int startOff = startX & 7;
+                    int mask = 0xFF >> startOff;
+                    if (isSet) data[bIdx] |= (byte)mask;
+                    else if (isClear) data[bIdx] &= (byte)~mask;
+                    else data[bIdx] ^= (byte)mask;
+                }
+                // middle full bytes
+                for (var b = startByte + 1; b < endByteExcl - 1; b++)
+                {
+                    var bIdx = rowBase + b;
+                    if (isSet) data[bIdx] = 0xFF;
+                    else if (isClear) data[bIdx] = 0x00;
+                    else data[bIdx] ^= 0xFF;
+                }
+                // last partial byte
+                {
+                    var lastIdx = endByteExcl - 1;
+                    var bIdx = rowBase + lastIdx;
+                    int endOff = endX & 7;
+                    int mask = endOff == 0 ? 0xFF : (0xFF << (8 - endOff) & 0xFF);
+                    // mask covers bits 0..endOff-1 ; e.g. endOff=3 => 11100000
+                    if (isSet) data[bIdx] |= (byte)mask;
+                    else if (isClear) data[bIdx] &= (byte)~mask;
+                    else data[bIdx] ^= (byte)mask;
+                }
+            }
+        }
     }
 
     public static void StrokeRect(MonochromeRaster raster, int x, int y, int width, int height, int thickness, string operation = "set")
@@ -191,6 +246,47 @@ public static class Raster
         var startY = Math.Max(0, -y);
         var endX = Math.Min(orientedWidth, target.Width - x);
         var endY = Math.Min(orientedHeight, target.Height - y);
+        if (startX >= endX || startY >= endY) return (orientedWidth, orientedHeight);
+        // Fast path for the common case: N orientation, no scaling
+        // This covers 95% of text glyph blits and bitmap field blits
+        if (orientation == Orientation.N && scaleX == 1 && scaleY == 1)
+        {
+            var srcStride = source.Stride;
+            var dstStride = target.Stride;
+            var srcData = source.Data;
+            var dstData = target.Data;
+            var isSet = operation == "set";
+            var isClear = operation == "clear";
+            // Precompute dest byte offset for x
+            for (var dy = startY; dy < endY; dy++)
+            {
+                var srcY = dy;
+                var dstY = y + dy;
+                if ((uint)srcY >= (uint)source.Height || (uint)dstY >= (uint)target.Height) continue;
+                var srcRow = srcY * srcStride;
+                var dstRow = dstY * dstStride;
+                // For each X, do bit test without function call overhead
+                for (var dx = startX; dx < endX; dx++)
+                {
+                    var srcX = dx;
+                    if ((srcData[srcRow + (srcX >> 3)] & (0x80 >> (srcX & 7))) == 0) continue;
+                    var dstX = x + dx;
+                    var idx = dstRow + (dstX >> 3);
+                    var mask = (byte)(0x80 >> (dstX & 7));
+                    if (isSet) dstData[idx] |= mask;
+                    else if (isClear) dstData[idx] &= (byte)~mask;
+                    else dstData[idx] ^= mask;
+                }
+            }
+            return (orientedWidth, orientedHeight);
+        }
+        // General path with orientation/scale - keep string compare hoisted
+        var isSet2 = operation == "set";
+        var isClear2 = operation == "clear";
+        var srcStride2 = source.Stride;
+        var dstStride2 = target.Stride;
+        var sData2 = source.Data;
+        var dData2 = target.Data;
         for (var destinationY = startY; destinationY < endY; destinationY++)
             for (var destinationX = startX; destinationX < endX; destinationX++)
             {
@@ -199,8 +295,17 @@ public static class Raster
                 else if (orientation == Orientation.I) { logicalX = logicalWidth - 1 - destinationX; logicalY = logicalHeight - 1 - destinationY; }
                 else if (orientation == Orientation.B) { logicalX = logicalWidth - 1 - destinationY; logicalY = destinationX; }
                 else { logicalX = destinationX; logicalY = destinationY; }
-                if (GetDot(source, logicalX / scaleX, logicalY / scaleY))
-                    SetDot(target, x + destinationX, y + destinationY, operation);
+                var sx = logicalX / scaleX;
+                var sy = logicalY / scaleY;
+                if ((uint)sx >= (uint)source.Width || (uint)sy >= (uint)source.Height) continue;
+                if ((sData2[sy * srcStride2 + (sx >> 3)] & (0x80 >> (sx & 7))) == 0) continue;
+                var dx2 = x + destinationX;
+                var dy2 = y + destinationY;
+                var dIdx = dy2 * dstStride2 + (dx2 >> 3);
+                var m = (byte)(0x80 >> (dx2 & 7));
+                if (isSet2) dData2[dIdx] |= m;
+                else if (isClear2) dData2[dIdx] &= (byte)~m;
+                else dData2[dIdx] ^= m;
             }
         return (orientedWidth, orientedHeight);
     }

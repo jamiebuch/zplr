@@ -11,6 +11,15 @@ public static class JobRenderer
     private static readonly HashSet<string> PersistentCommands = new() { "BY","CF","CI","CV","FW","LH","LL","LR","LS","LT","ML","MN","MC","MU","PO","PA","PW","SE" };
     private static readonly Dictionary<string,string> DownloadObjectExtensions = new() { ["T"]="TTF", ["E"]="TTE", ["P"]="PNG", ["B"]="BMP", ["X"]="PCX", ["G"]="GRF", ["NRD"]="NRD", ["PAC"]="PAC", ["C"]="WML", ["F"]="HTM", ["H"]="GET" };
     private const int MaxSerializationFieldSize = 3 * 1024;
+    // Perf: compile once - these are hot in job rendering (every ~DG/~DY/^DF command)
+    private static readonly Regex DecimalIntRegex = new(@"^-?\d+$", RegexOptions.Compiled);
+    private static readonly Regex ExtensionRegex = new(@"\.[A-Z0-9]+$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FontAliasRegex = new(@"^[A-Z0-9]$", RegexOptions.Compiled);
+    private static readonly Regex PatternWildRegex = new(@"\.[A-Z0-9*?]+$", RegexOptions.Compiled);
+    private static readonly Regex DriveRegex = new(@"^[ABER]:", RegexOptions.Compiled);
+    private static readonly Regex WrappedPrefixRegex = new(@"^:(?:B64|Z64):", RegexOptions.Compiled);
+    private static readonly Regex DigitRunRegex = new(@"\d+", RegexOptions.Compiled);
+    private static readonly Regex BitmapFontRegex = new(@"#([0-9A-Fa-f]{1,4})\.(-?\d+)\.(-?\d+)\.(-?\d+)\.(-?\d+)\.(-?\d+)\.([\s\S]*?)(?=#(?:[0-9A-Fa-f]{1,4})\.|$)", RegexOptions.Compiled);
 
     private sealed class StoredFormat { public List<ZplCommandNode> Commands = new(); public int Bytes; public SourceSpan DefinitionSpan = new(0,0); public int DocumentId; }
     private sealed class StoredObject { public byte[] Data = Array.Empty<byte>(); public string Kind="binary"; }
@@ -44,7 +53,7 @@ public static class JobRenderer
         return DateTime.UtcNow;
     }
     private static Match? RightmostNumber(string value){
-        var ms=Regex.Matches(value, @"\d+");
+        var ms=DigitRunRegex.Matches(value);
         return ms.Count>0? ms[^1]: null;
     }
     private static string SerializeNumber(string value, string increment, bool leadingZeros, int step){
@@ -302,14 +311,14 @@ public static class JobRenderer
     }
 
     private static int? DecimalInteger(string? v){
-        var s=v?.Trim()??""; if(!Regex.IsMatch(s, @"^-?\d+$")) return null;
+        var s=v?.Trim()??""; if(!DecimalIntRegex.IsMatch(s)) return null;
         if(long.TryParse(s, out var l) && l>= -9007199254740991 && l<=9007199254740991) return (int)l;
         return null;
     }
 
     private static string ObjectPath(string value, string extension, SessionState state){
         var n=AliasedPath(value.Length==0? "R:UNKNOWN": value, state);
-        if(!Regex.IsMatch(n, @"\.[A-Z0-9]+$", RegexOptions.IgnoreCase)) n+=$".{extension}";
+        if(!ExtensionRegex.IsMatch(n)) n+=$".{extension}";
         return n.ToUpperInvariant();
     }
 
@@ -407,7 +416,7 @@ public static class JobRenderer
         return bytes;
     }
 
-    private static string NormalizeLegacyHexZeros(string source) => Regex.IsMatch(source.TrimStart(), @"^:(?:B64|Z64):") ? source : source.Replace('O','0').Replace('o','0');
+    private static string NormalizeLegacyHexZeros(string source) => WrappedPrefixRegex.IsMatch(source.TrimStart()) ? source : source.Replace('O','0').Replace('o','0');
     private static void ProcessDownloadEncoding(ZplCommandNode cmd, SessionState state, RenderLimits limits, List<ZplDiagnostic> diags){
         var name=ObjectPath(cmd.Parameters.ElementAtOrDefault(0)??"", "DAT", state);
         if(DisabledResource(name)) return;
@@ -451,7 +460,7 @@ public static class JobRenderer
         var orientation=cmd.Parameters.ElementAtOrDefault(1)?.Trim().ToUpperInvariant()??"";
         var copyright=cmd.Parameters.ElementAtOrDefault(7)??"";
         var glyphs=new Dictionary<int, DownloadedBitmapGlyph>();
-        var matcher=new Regex(@"#([0-9A-Fa-f]{1,4})\.(-?\d+)\.(-?\d+)\.(-?\d+)\.(-?\d+)\.(-?\d+)\.([\s\S]*?)(?=#(?:[0-9A-Fa-f]{1,4})\.|$)");
+        var matcher=BitmapFontRegex;
         try{
             if(orientation!="N" || copyright.Length<1 || copyright.Length>63 || cellHeight==null || cellWidth==null || baseline==null || spaceWidth==null || expectedChars==null || cellHeight<=0 || cellWidth<=0 || baseline<=0 || baseline>cellHeight || spaceWidth<=0 || spaceWidth>Math.Min(32000, limits.MaxDimension) || expectedChars<=0 || expectedChars>256 || cellHeight>Math.Min(32000, limits.MaxDimension) || cellWidth>Math.Min(32000, limits.MaxDimension)){
                 throw new GraphicDecodeError("INVALID_OBJECT_DATA","Downloaded bitmap font header metrics are invalid.");
@@ -519,7 +528,7 @@ public static class JobRenderer
     private static void ProcessFontAlias(ZplCommandNode cmd, SessionState state, RenderLimits limits, List<ZplDiagnostic> diags){
         var id=(cmd.Parameters.ElementAtOrDefault(0)?.Trim().ToUpperInvariant()??"");
         var req=(cmd.Parameters.ElementAtOrDefault(1)?.Trim()??"");
-        if(!Regex.IsMatch(id, "^[A-Z0-9]$") || string.IsNullOrEmpty(req)) return;
+        if(!FontAliasRegex.IsMatch(id) || string.IsNullOrEmpty(req)) return;
         var name=AliasedPath(req, state);
         var prevName=state.FontAliases.TryGetValue(id, out var pn)? pn: null;
         int prevBytes= prevName!=null? Utf8ByteLength(id)+Utf8ByteLength(prevName)+1:0;
@@ -555,7 +564,7 @@ public static class JobRenderer
         else if(cmd.Canonical=="^ID") {
             var pattern=(cmd.Parameters.ElementAtOrDefault(0)??"R:*.*").Trim().ToUpperInvariant();
             if(!pattern.Contains(":")) pattern=$"R:{pattern}";
-            if(!Regex.IsMatch(pattern, @"\.[A-Z0-9*?]+$")) pattern+=".GRF";
+            if(!PatternWildRegex.IsMatch(pattern)) pattern+=".GRF";
             var matcher=new Regex("^"+Regex.Escape(pattern).Replace("\\*",".*").Replace("\\?",".")+"$");
             foreach(var k in state.Graphics.Keys.Where(k=> matcher.IsMatch(k)).ToList()){ state.ResourceBytes-=ResourceCost(k, state.Graphics[k].Data.Length); state.Graphics.Remove(k); }
             foreach(var k in state.Formats.Keys.Where(k=> matcher.IsMatch(k)).ToList()){ state.ResourceBytes-=ResourceCost(k, state.Formats[k].Bytes); state.Formats.Remove(k); }
@@ -565,7 +574,7 @@ public static class JobRenderer
             // Transfer object - simplified: handle graphics/formats/objects transfer via wildcard
             var srcPat=(cmd.Parameters.ElementAtOrDefault(0)??"").Trim().ToUpperInvariant();
             var dstPat=(cmd.Parameters.ElementAtOrDefault(1)??"").Trim().ToUpperInvariant();
-            if(Regex.IsMatch(srcPat, @"^[ABER]:") && Regex.IsMatch(dstPat, @"^[ABER]:")){
+            if(DriveRegex.IsMatch(srcPat) && DriveRegex.IsMatch(dstPat)){
                 var srcRegex=new Regex("^"+Regex.Escape(srcPat).Replace("\\*",".*").Replace("\\?",".")+"$");
                 foreach(var kv in state.Graphics.Where(kv=> srcRegex.IsMatch(kv.Key)).ToList()){
                     var dst=dstPat.Replace("*", kv.Key.Split(':')[1]);

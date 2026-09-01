@@ -6,22 +6,22 @@ renderer and parser, not a printer driver: it does not send jobs to a printer,
 perform network operations, or look up files on behalf of a ZPL job.
 
 This guide targets a .NET 10 application. Use the .NET SDK 10.0.400 or later
-and a `net10.0` runtime. The current package version is `0.3.0`. The current
+and a `net10.0` runtime. The current package version is `0.3.1`. The current
 source setup uses the project's private NuGet feed; select it for the package
 installation without putting credentials in the command or in the project:
 
 ```powershell
 $env:NUGET_SOURCE = "http://nuget.wnConsign.com/nuget"
-dotnet add package Zplr.Renderer --version 0.3.0 --source $env:NUGET_SOURCE
+dotnet add package Zplr.Renderer --version 0.3.1 --source $env:NUGET_SOURCE
 ```
 
 This URL matches the current private-feed setup and should only be used from
 an approved, trusted private network. Prefer HTTPS, and enable it here if the
 feed supports HTTPS.
 
-Keep the hardcoded `0.3.0` in this example synchronized with the `<Version>`
+Keep the hardcoded `0.3.1` in this example synchronized with the `<Version>`
 value in the current `dotnet/Zplr.Renderer/Zplr.Renderer.csproj`. Maintainers
-and consumers must update every `0.3.0` in this setup example whenever the
+and consumers must update every `0.3.1` in this setup example whenever the
 project/package version changes.
 
 Authenticate to a private feed through the developer's NuGet credential

@@ -61,39 +61,98 @@ public sealed class SkiaCanvas : ICanvas
     public SKBitmap ToSKBitmap() => _bitmap;
 
     /// <summary>Write a <see cref="MonochromeRaster"/> into this canvas — mirrors <c>canvasFromRaster</c> in renderDocument.ts.</summary>
+    /// <remarks>
+    /// Perf divergence from TS: TS does rasterToRgba + putImageData as a single memcpy.
+    /// Previous .NET port did SetPixel per dot (1M+ calls per label). This version does a
+    /// single bulk copy via SKPixmap.InstallPixels + direct row blit. Keep in sync with
+    /// src/helper/rendering/canvas-node.ts if the TS path changes.
+    /// </remarks>
     public void DrawRaster(MonochromeRaster raster)
     {
         if (raster.Width == 0 || raster.Height == 0) return;
-        // Match TS rasterToRgba + putImageData: black dot -> 0, white -> 255
-        var info = new SKImageInfo(raster.Width, raster.Height, SKColorType.Rgba8888, SKAlphaType.Premul);
-        using var img = SKImage.Create(info);
-        // Build RGBA via direct pixel copy using raster data
-        var rgba = new byte[raster.Width * raster.Height * 4];
-        for (var y = 0; y < raster.Height; y++)
+        var copyWidth = Math.Min(raster.Width, Width);
+        var copyHeight = Math.Min(raster.Height, Height);
+        if (copyWidth <= 0 || copyHeight <= 0) return;
+
+        var pixelCount = copyWidth * copyHeight;
+        var rgbaLen = pixelCount * 4;
+        var rented = System.Buffers.ArrayPool<byte>.Shared.Rent(rgbaLen);
+        try
         {
-            for (var x = 0; x < raster.Width; x++)
+            var rgba = rented.AsSpan(0, rgbaLen);
+            var srcData = raster.Data;
+            var srcStride = raster.Stride;
+            var dstIdx = 0;
+            for (var y = 0; y < copyHeight; y++)
             {
-                var byteIndex = y * raster.Stride + (x >> 3);
-                var mask = (byte)(0x80 >> (x & 7));
-                var black = (raster.Data[byteIndex] & mask) != 0;
-                var v = black ? (byte)0 : (byte)255;
-                var off = (y * raster.Width + x) * 4;
-                rgba[off] = v;
-                rgba[off + 1] = v;
-                rgba[off + 2] = v;
-                rgba[off + 3] = 255;
+                var rowOffset = y * srcStride;
+                for (var x = 0; x < copyWidth; x++)
+                {
+                    var black = (srcData[rowOffset + (x >> 3)] & (0x80 >> (x & 7))) != 0;
+                    var v = black ? (byte)0 : (byte)255;
+                    rgba[dstIdx++] = v;
+                    rgba[dstIdx++] = v;
+                    rgba[dstIdx++] = v;
+                    rgba[dstIdx++] = 255;
+                }
+            }
+
+            var info = new SKImageInfo(copyWidth, copyHeight, SKColorType.Rgba8888, SKAlphaType.Premul);
+            unsafe
+            {
+                fixed (byte* p = rented)
+                {
+                    var srcPixmap = new SKPixmap(info, (nint)p, info.RowBytes);
+                    // FromPixels copies by default when we immediately create image then draw
+                    using var srcImage = SKImage.FromPixels(srcPixmap);
+                    _canvas.DrawImage(srcImage, 0, 0);
+                }
             }
         }
-        // Write pixels via Skia
-        var pixmap = new SKPixmap(info, (nint)System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(rgba, 0), info.RowBytes);
-        // Instead use bitmap setPixels
-        for (var y = 0; y < raster.Height && y < Height; y++)
+        finally
         {
-            for (var x = 0; x < raster.Width && x < Width; x++)
+            System.Buffers.ArrayPool<byte>.Shared.Return(rented);
+        }
+    }
+
+    /// <summary>
+    /// Fast path: encode PNG directly from raster without an intermediate canvas.
+    /// Used by RenderZplPngAsync to avoid SkiaCanvas allocation + DrawRaster when only bytes are needed.
+    /// Mirrors TS optimization where canvas is only needed for highlight regions.
+    /// </summary>
+    public static byte[] EncodeMonochromeRasterToPng(MonochromeRaster raster)
+    {
+        if (raster.Width == 0 || raster.Height == 0)
+        {
+            using var emptyBmp = new SKBitmap(1, 1, SKColorType.Rgba8888, SKAlphaType.Premul);
+            emptyBmp.Erase(SKColors.White);
+            using var img0 = SKImage.FromBitmap(emptyBmp);
+            using var data0 = img0.Encode(SKEncodedImageFormat.Png, 100);
+            return data0.ToArray();
+        }
+        var w = raster.Width; var h = raster.Height;
+        var info = new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);
+        var rgba = new byte[w * h * 4];
+        var srcData = raster.Data; var srcStride = raster.Stride;
+        var off = 0;
+        for (var y = 0; y < h; y++)
+        {
+            var row = y * srcStride;
+            for (var x = 0; x < w; x++)
             {
-                var off = (y * raster.Width + x) * 4;
-                var v = rgba[off];
-                _bitmap.SetPixel(x, y, new SKColor(v, v, v, 255));
+                var black = (srcData[row + (x >> 3)] & (0x80 >> (x & 7))) != 0;
+                var v = black ? (byte)0 : (byte)255;
+                rgba[off++] = v; rgba[off++] = v; rgba[off++] = v; rgba[off++] = 255;
+            }
+        }
+        unsafe
+        {
+            fixed (byte* p = rgba)
+            {
+                var pixmap = new SKPixmap(info, (nint)p, info.RowBytes);
+                using var image = SKImage.FromPixels(pixmap);
+                using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+                return data.ToArray();
             }
         }
     }

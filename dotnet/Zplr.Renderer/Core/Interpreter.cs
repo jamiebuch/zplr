@@ -6,6 +6,10 @@ namespace Zplr.Renderer.Core;
 
 public static class Interpreter
 {
+    // Perf: hoist Regexes - these are hot (NormalizeResourceName called per XG/IM, hex check per ^FH field)
+    private static readonly System.Text.RegularExpressions.Regex ExtensionRegex = new(@"\.[A-Z0-9]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex HexByteRegex = new("^[0-9A-Fa-f]{2}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
     public sealed record StoredGraphic(byte[] Data, int BytesPerRow, int Width, int Height);
     public sealed record InterpretResourceContext(
         IReadOnlyDictionary<string, StoredGraphic> Graphics,
@@ -44,7 +48,7 @@ public static class Interpreter
         if (obj == "") obj = "UNKNOWN";
         else if (obj.StartsWith(".")) obj = $"UNKNOWN{obj}";
         normalized = $"{device}:{obj}";
-        if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, @"\.[A-Z0-9]+$")) normalized += $".{defaultExtension}";
+        if (!ExtensionRegex.IsMatch(normalized)) normalized += $".{defaultExtension}";
         var drive = normalized[0].ToString();
         if (memoryAliases != null && memoryAliases.TryGetValue(drive, out var mapped))
             normalized = $"{mapped}:{normalized[(normalized.IndexOf(':')+1)..]}";
@@ -77,11 +81,18 @@ public static class Interpreter
         return sb.ToString();
     }
     private static string DecodeFieldBytes(List<int> input, int characterSet, IReadOnlyDictionary<int,int> remap, IReadOnlyDictionary<int,int>? encoding){
-        var bytes=input.Select(b=> remap.TryGetValue(b, out var v)? v:b).ToList();
-        if(new[]{14,24,26}.Contains(characterSet) && encoding!=null) return DecodeTableBytes(bytes, characterSet, encoding);
+        // Perf: avoid LINQ allocation per field - manual loop, keep TS logic for upsert
+        var bytes = new List<int>(input.Count);
+        foreach (var b in input) bytes.Add(remap.TryGetValue(b, out var v) ? v : b);
+        if((characterSet==14||characterSet==24||characterSet==26) && encoding!=null) return DecodeTableBytes(bytes, characterSet, encoding);
         string? decoderName = characterSet==15?"shift_jis": characterSet==16?"euc-jp": characterSet==17||characterSet==29?"utf-16BE": characterSet==30?"utf-16LE": characterSet==31?"windows-1250": characterSet==33?"windows-1251": characterSet==34?"windows-1253": characterSet==35?"windows-1254": characterSet==36?"windows-1255": characterSet==27?"windows-1252": characterSet==28?"utf-8": characterSet==26?"gb18030": null;
         if(decoderName!=null){
-            try{ var enc=System.Text.Encoding.GetEncoding(decoderName); return enc.GetString(bytes.Select(b=>(byte)b).ToArray()); } catch{}
+            try{
+                var enc=System.Text.Encoding.GetEncoding(decoderName);
+                var byteArr = new byte[bytes.Count];
+                for (int i=0;i<bytes.Count;i++) byteArr[i]=(byte)bytes[i];
+                return enc.GetString(byteArr);
+            } catch{}
         }
         var sb2=new System.Text.StringBuilder();
         foreach(var b in bytes){
@@ -146,7 +157,15 @@ public static class Interpreter
             }
             return ApplyEncodingTable(ch, encoding);
         }
-        if(string.IsNullOrEmpty(indicator)) return string.Concat(data.Select(c=> MapDirect(c.ToString())));
+        if(string.IsNullOrEmpty(indicator)){
+            // Perf: avoid LINQ + string.Concat per char allocation
+            var sb0 = new System.Text.StringBuilder(data.Length);
+            foreach (var ch2 in data.EnumerateRunes()){
+                var s=ch2.ToString();
+                sb0.Append(MapDirect(s));
+            }
+            return sb0.ToString();
+        }
         var result=new System.Text.StringBuilder();
         var encoded=new List<int>();
         void Flush(){
@@ -157,7 +176,7 @@ public static class Interpreter
         for(int i=0;i<data.Length;i++){
             if(data[i].ToString()!=indicator){ Flush(); int cp=char.ConvertToUtf32(data, i); string ch=char.ConvertFromUtf32(cp); result.Append(MapDirect(ch)); i+=ch.Length-1; continue; }
             string hex=i+2<data.Length? data.Substring(i+1,2): "";
-            if(System.Text.RegularExpressions.Regex.IsMatch(hex, "^[0-9A-Fa-f]{2}$")){ encoded.Add(Convert.ToInt32(hex,16)); i+=2; }
+            if(HexByteRegex.IsMatch(hex)){ encoded.Add(Convert.ToInt32(hex,16)); i+=2; }
             else{ Flush(); diagnostics.Add(new ZplDiagnostic("INVALID_HEX_ESCAPE", ZplDiagnosticSeverity.Error, ZplDiagnosticPhase.Semantic, $"Expected two hexadecimal digits after {indicator}.", node.Span, null, node.Canonical, labelIndex)); result.Append(indicator); }
         }
         Flush();

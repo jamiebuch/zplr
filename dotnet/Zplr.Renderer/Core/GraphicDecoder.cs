@@ -15,6 +15,12 @@ public sealed record DecodedGraphic(byte[] Data, int BytesPerRow, int Width, int
 
 public static class GraphicDecoder
 {
+    private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+    private static readonly Regex Base64Regex = new(@"^[A-Za-z0-9+/]*={0,2}$", RegexOptions.Compiled);
+    private static readonly Regex WrappedRegex = new(@"^:(Z64|B64):([^:]+):([0-9A-Fa-f]{4})$", RegexOptions.Compiled);
+    private static readonly Regex WrappedPrefixRegex = new(@"^:(?:Z64|B64):", RegexOptions.Compiled);
+    private static readonly Regex HexDigitRegex = new(@"^[0-9A-Fa-f]+$", RegexOptions.Compiled);
+
     public static (int width, int height) ValidateGraphicGeometry(int bytesPerRow, int expectedBytes, int maxBytes)
     {
         if (bytesPerRow <= 0 || expectedBytes <= 0)
@@ -104,8 +110,8 @@ public static class GraphicDecoder
     private static byte[] DecodeBase64(string value)
     {
         const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        var compact = Regex.Replace(value, @"\s+", "");
-        if (!Regex.IsMatch(compact, @"^[A-Za-z0-9+/]*={0,2}$"))
+        var compact = WhitespaceRegex.Replace(value, "");
+        if (!Base64Regex.IsMatch(compact))
             throw new GraphicDecodeError("INVALID_GRAPHIC_BASE64", "Graphic Base64 data is invalid.");
         var padding = compact.Length - compact.TrimEnd('=').Length;
         var normalized = compact[..(compact.Length - padding)];
@@ -159,15 +165,15 @@ public static class GraphicDecoder
     private static byte[]? DecodeWrappedData(string source, int expectedBytes, int maxBytes)
     {
         var trimmed = source.Trim();
-        var m = Regex.Match(trimmed, @"^:(Z64|B64):([^:]+):([0-9A-Fa-f]{4})$");
+        var m = WrappedRegex.Match(trimmed);
         if (!m.Success)
         {
-            if (Regex.IsMatch(trimmed, @"^:(?:Z64|B64):"))
+            if (WrappedPrefixRegex.IsMatch(trimmed))
                 throw new GraphicDecodeError("INVALID_GRAPHIC_WRAPPER", "B64/Z64 graphic data must end with a four-digit hexadecimal CRC.");
             return null;
         }
         var kind = m.Groups[1].Value;
-        var encodedText = Regex.Replace(m.Groups[2].Value, @"\s+", "");
+        var encodedText = WhitespaceRegex.Replace(m.Groups[2].Value, "");
         var maximumDecodedInput = kind == "B64" ? expectedBytes : maxBytes + (int)Math.Ceiling(maxBytes / 16384.0) * 5 + 64;
         var maximumEncodedLength = 4 * (int)Math.Ceiling(maximumDecodedInput / 3.0);
         if (encodedText.Length > maximumEncodedLength)

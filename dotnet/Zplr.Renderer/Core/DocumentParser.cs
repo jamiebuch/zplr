@@ -1,10 +1,14 @@
 // Port of src/core/documentParser.ts
+using System.Text.RegularExpressions;
 using Zplr.Renderer.Types;
 
 namespace Zplr.Renderer.Core;
 
 public static class DocumentParser
 {
+    private static readonly Regex DigitsRegex = new(@"^\d+$", RegexOptions.Compiled);
+    private static readonly Regex CodeRegex = new(@"^[A-Z0-9]{2}$", RegexOptions.Compiled);
+
     private const string STX = "\u0002";
     private const string ETX = "\u0003";
     private const string SI = "\u000f";
@@ -47,7 +51,7 @@ public static class DocumentParser
         var format = (header.Length > (code == "DY" ? 1 : 0) ? header[code == "DY" ? 1 : 0]?.Trim().ToUpperInvariant() : null) ?? "";
         if (format != "B" && format != "C") return null;
         var byteCountStr = header.Length > (code == "DY" ? 3 : 1) ? header[code == "DY" ? 3 : 1]?.Trim() ?? "" : "";
-        if (!System.Text.RegularExpressions.Regex.IsMatch(byteCountStr, @"^\d+$")) return null;
+        if (!DigitsRegex.IsMatch(byteCountStr)) return null;
         if (!int.TryParse(byteCountStr, out var bytes)) return null;
         return Math.Min(source.Length, lastDelimiter + 1 + bytes);
     }
@@ -63,7 +67,7 @@ public static class DocumentParser
         }
         if (prefixIndex + 2 >= source.Length) return null;
         var code = source.Substring(prefixIndex + 1, 2);
-        if (!System.Text.RegularExpressions.Regex.IsMatch(code, @"^[A-Z0-9]{2}$")) return null;
+        if (!CodeRegex.IsMatch(code)) return null;
         return (code, 2);
     }
 
