@@ -18,9 +18,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="QRCoder" Version="1.6.0" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
     <PackageReference Include="SkiaSharp" Version="4.151.1" />
-    <PackageReference Include="ZXing.Net" Version="0.16.9" />
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
 
 </Project>
