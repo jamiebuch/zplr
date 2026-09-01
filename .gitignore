@@ -31,8 +31,9 @@ test-results
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
-.idea
-.DS_Store
+.idea/
+**/.idea/
+**/.idea/**
 *.suo
 *.ntvs*
 *.njsproj
@@ -58,3 +59,10 @@ Thumbs.db
 src/experiments.ts
 
 local
+
+# .NET
+dotnet/**/bin/
+dotnet/**/obj/
+dotnet/**/TestResults/
+*.user
+*.userosscache

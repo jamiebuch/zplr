@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Zplr.Renderer.Tests/Zplr.Renderer.Tests.csproj" />
+  <Project Path="Zplr.Renderer/Zplr.Renderer.csproj" />
+</Solution>
